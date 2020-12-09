@@ -1,37 +1,26 @@
-## Welcome to GitHub Pages
+##### 2020 BST260 Final Project - Group 8
+## Movie Recommender and Explorer (TBD)
 
-You can use the [editor on GitHub](https://github.com/dachuwu/2020BST260_group8_movie.github.io/edit/gh-pages/index.md) to maintain and preview the content for your website in Markdown files.
+**Team members: Jie Sun, Ta-Chou Ng (Vincent), Yu Sun**
 
-Whenever you commit to this repository, GitHub Pages will run [Jekyll](https://jekyllrb.com/) to rebuild the pages in your site, from the content in your Markdown files.
+### Overview and Motivation: 
+Provide an overview of the project goals and the motivation for it. Consider that this will be read by people who did not see your project proposal.
 
-### Markdown
+### Related Work: 
+Anything that inspired you, such as a paper, a web site, or something we discussed in class.
 
-Markdown is a lightweight and easy-to-use syntax for styling your writing. It includes conventions for
+### Initial Questions:
+What questions are you trying to answer? How did these questions evolve over the course of the project? What new questions did you consider in the course of your analysis?
 
-```markdown
-Syntax highlighted code block
+### Data: 
+Source, scraping method, cleanup, etc. (link to Vincent's page)[]
 
-# Header 1
-## Header 2
-### Header 3
+### Exploratory Analysis: 
+What visualizations did you use to look at your data in different ways? What are the different statistical methods you considered? Justify the decisions you made, and show any major changes to your ideas. How did you reach these conclusions? (link to Yu's page)[]
 
-- Bulleted
-- List
+### Final Analysis: 
+What did you learn about the data? How did you answer the questions? How can you justify your answers? Note that 1 type of analysis per team member is required. A Shiny app counts as a type of analysis. (link to Jie's page)[]
 
-1. Numbered
-2. List
 
-**Bold** and _Italic_ and `Code` text
-
-[Link](url) and ![Image](src)
-```
-
-For more details see [GitHub Flavored Markdown](https://guides.github.com/features/mastering-markdown/).
-
-### Jekyll Themes
-
-Your Pages site will use the layout and styles from the Jekyll theme you have selected in your [repository settings](https://github.com/dachuwu/2020BST260_group8_movie.github.io/settings). The name of this theme is saved in the Jekyll `_config.yml` configuration file.
-
-### Support or Contact
-
-Having trouble with Pages? Check out our [documentation](https://docs.github.com/categories/github-pages-basics/) or [contact support](https://github.com/contact) and we’ll help you sort it out.
+### Other resources
+Our screen cast can be found here
