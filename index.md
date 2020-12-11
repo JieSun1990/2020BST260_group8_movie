@@ -22,5 +22,8 @@ What visualizations did you use to look at your data in different ways? What are
 What did you learn about the data? How did you answer the questions? How can you justify your answers? Note that 1 type of analysis per team member is required. A Shiny app counts as a type of analysis. [See more details (to Jie's page)](sub/)
 
 
-### Other resources
-Our screen cast can be found [here]()
+### Shiny Application and Screencast
+
+Our Shiny application can be found [here]()
+
+Our screencast can be found [here](https://dachuwu.shinyapps.io/2020BST260_group8_movie/)
