@@ -24,6 +24,6 @@ What did you learn about the data? How did you answer the questions? How can you
 
 ### Shiny Application and Screencast
 
-Our Shiny application can be found [here]()
+Our Shiny application can be found [here](https://dachuwu.shinyapps.io/2020BST260_group8_movie/)
 
-Our screencast can be found [here](https://dachuwu.shinyapps.io/2020BST260_group8_movie/)
+Our screencast can be found [here]()
