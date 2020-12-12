@@ -9,16 +9,20 @@ Predicting the success of a movie is important for the film-making company (to p
 
 ## Initial Questions:
 We approach this goal using 3 different analysis, and ask these questions
+
   (1) **Movie exploration** (Yu Sun):
-    - How does the movie industry look over the last two decades, in terms of different features, such as box office, genre, rating and award winning? 
-    - Which features correlates with the success of a movie (ratings and the box office)
-    - Is there a way to visualize the IMDB movie data on an aggregate scale, based on user inputs such as year, cast and genre?
+      * How does the movie industry look over the last two decades, in terms of different features, such as box office, genre, rating and award winning? 
+      * Which features correlates with the success of a movie (ratings and the box office)
+      * Is there a way to visualize the IMDB movie data on an aggregate scale, based on user inputs such as year, cast and genre?
+    
   (2) **Collaboration network analysis** (Vincent Ng): 
-    - How are movies, actors and directors connected, and what is the strength of their associations? 
-    - What does the movie collaboration network look like? Are those successful movies clustered together?
+      * How are movies, actors and directors connected, and what is the strength of their associations? 
+      * What does the movie collaboration network look like? Are those successful movies clustered together?
+    
   (3) **Logistic regression** (Jie Sun): 
-    - What predicts the success of a movie? How likely it is for an upcoming film project to succeed?
-    - As an investor for an upcoming filming project, given cast, director and genre, what is the probability that this movie is going to be a success? 
+      * What predicts the success of a movie? How likely it is for an upcoming film project to succeed?
+      * As an investor for an upcoming filming project, given cast, director and genre, what is the probability that this movie is going to be a success? 
+    
 
 ## Related Work: 
 #### (1) Shiny App for exploring movie exploration:
