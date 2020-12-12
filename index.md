@@ -13,7 +13,9 @@ Anything that inspired you, such as a paper, a web site, or something we discuss
 What questions are you trying to answer? How did these questions evolve over the course of the project? What new questions did you consider in the course of your analysis?
 
 ### Data: 
-Source, scraping method, cleanup, etc. [See more details (to Vincent's page)](sub/01_scraping.html)
+The features of each movie, such as genre(s), box office, and ratings, etc, are needed for the exploratory analysis, and the success prediction. 
+Also, a full list of cast/ directors/ writers are required for movie collaboration network analysis.
+We scrape all the information of the movies released during Jan. 2000 ~ Nov. 2020 from [IMDb](https://www.imdb.com/) website. Details of the methos, codes, and exmaple can be found [HERE](pages/01_scraping.html).
 
 ### Exploratory Analysis: 
 What visualizations did you use to look at your data in different ways? What are the different statistical methods you considered? Justify the decisions you made, and show any major changes to your ideas. How did you reach these conclusions? [See more details (to Yu's page)](sub/)
@@ -24,6 +26,6 @@ What did you learn about the data? How did you answer the questions? How can you
 
 ### Shiny Application and Screencast
 
-Our Shiny application can be found [here]()
+Our Shiny application can be found [here](https://dachuwu.shinyapps.io/2020BST260_group8_movie/)
 
 Our screencast can be found [here](https://dachuwu.shinyapps.io/2020BST260_group8_movie/)

@@ -10,7 +10,7 @@
 
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-<meta name="author" content="Ta-Chou V. Ng (02 Dec, 2020)" />
+<meta name="author" content="by Ta-Chou Ng (Vincent)" />
 
 
 <title>Scraping the IMDb website</title>
@@ -153,14 +153,14 @@ code span.ot { color: #007020; }
 
 <section class="page-header">
 <h1 class="title toc-ignore project-name">Scraping the IMDb website</h1>
-<h4 class="author project-author">Ta-Chou V. Ng (02 Dec, 2020)</h4>
+<h4 class="author project-author">by Ta-Chou Ng (Vincent)</h4>
 </section>
 
 
 
 <section class="main-content">
 <p>This document demonstrate how to scrape movie profiles from <a href="https://www.imdb.com/">IMDb</a>. There are three steps: First, we retrieved the catalog listing the movie IDs and names which will be use to scrape further in-depth information. Second, we iterated through the catalog to get various information including ratings, box office, cast list, and other details of each movie. Finally, we cast the scraped data into formats that can be used for regression and network analysis.</p>
-<div id="retriveing-the-catalog" class="section level3">
+<div id="sec1" class="section level3">
 <h3>1. Retriveing the catalog</h3>
 <p>The search engine on <a href="https://www.imdb.com/">IMDb</a> website provides convenient way to search for movie with custom criteria through URL links. See the following example.</p>
 <blockquote>
@@ -249,32 +249,361 @@ code span.ot { color: #007020; }
 <p>The main page contains several variables of interest, namely, the genres, box office, language, country, and plot keywords of the movie.</p>
 <p>First, we define a function that loads a web page with http headers ensuring that we get the returning content in English.</p>
 <div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1"></a>load_page &lt;-<span class="st"> </span><span class="cf">function</span>(x){</span>
-<span id="cb3-2"><a href="#cb3-2"></a>  <span class="kw">try</span>({</span>
-<span id="cb3-3"><a href="#cb3-3"></a>    <span class="kw">url</span>(x, <span class="dt">headers =</span> <span class="kw">c</span>(<span class="st">&quot;Accept-Language&quot;</span>=<span class="st"> &quot;en-US&quot;</span>)) <span class="op">%&gt;%</span></span>
-<span id="cb3-4"><a href="#cb3-4"></a><span class="st">    </span><span class="kw">read_html</span>(x)</span>
-<span id="cb3-5"><a href="#cb3-5"></a>  })</span>
-<span id="cb3-6"><a href="#cb3-6"></a>}</span></code></pre></div>
+<span id="cb3-2"><a href="#cb3-2"></a>  <span class="co"># take url x and request content in English</span></span>
+<span id="cb3-3"><a href="#cb3-3"></a>  <span class="kw">try</span>({ <span class="co"># catch errors when we bump into something like Error:404</span></span>
+<span id="cb3-4"><a href="#cb3-4"></a>    <span class="kw">url</span>(x, <span class="dt">headers =</span> <span class="kw">c</span>(<span class="st">&quot;Accept-Language&quot;</span>=<span class="st"> &quot;en-US&quot;</span>)) <span class="op">%&gt;%</span></span>
+<span id="cb3-5"><a href="#cb3-5"></a><span class="st">    </span><span class="kw">read_html</span>(x)</span>
+<span id="cb3-6"><a href="#cb3-6"></a>  })</span>
+<span id="cb3-7"><a href="#cb3-7"></a>}</span></code></pre></div>
+<p>Next, we start from scraping the table from the main page of the movie. There is an HTML table (xpath = <code>//div[@id=&#39;titleDetails&#39;]/div[@class=&#39;txt-block&#39;]</code>) listing the variables of interest, including the box office, budget, countries, etc. The following function <code>extrac_p1()</code> does this job, and save the result in <code>p1</code>, a list containing movie-specific information. All part of the results will be saved in this format. And they’ll be combined into a larger list encompassing all variables we want. Note that the variable can be a single string or a string vector.</p>
 <div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1"></a>iID &lt;-<span class="st"> &quot;tt0268978&quot;</span></span>
-<span id="cb4-2"><a href="#cb4-2"></a>url &lt;-<span class="st"> </span><span class="kw">paste0</span>(<span class="st">&quot;https://www.imdb.com/title/&quot;</span>, iID)</span></code></pre></div>
+<span id="cb4-2"><a href="#cb4-2"></a>url &lt;-<span class="st"> </span><span class="kw">paste0</span>(<span class="st">&quot;https://www.imdb.com/title/&quot;</span>, iID)</span>
+<span id="cb4-3"><a href="#cb4-3"></a>content_<span class="dv">1</span>_main &lt;-<span class="st"> </span><span class="kw">load_page</span>(url)</span>
+<span id="cb4-4"><a href="#cb4-4"></a></span>
+<span id="cb4-5"><a href="#cb4-5"></a><span class="co"># sub-routine</span></span>
+<span id="cb4-6"><a href="#cb4-6"></a>extrac_p1 &lt;-<span class="st"> </span><span class="cf">function</span>(content){</span>
+<span id="cb4-7"><a href="#cb4-7"></a>  <span class="co"># temporary container for the results</span></span>
+<span id="cb4-8"><a href="#cb4-8"></a>  tmp &lt;-<span class="st"> </span>content<span class="op">%&gt;%</span><span class="st"> </span></span>
+<span id="cb4-9"><a href="#cb4-9"></a><span class="st">  </span><span class="co"># select the table of movie details, and clean it</span></span>
+<span id="cb4-10"><a href="#cb4-10"></a><span class="st">  </span><span class="kw">html_nodes</span>(<span class="dt">xpath =</span> <span class="st">&quot;//div[@id=&#39;titleDetails&#39;]/div[@class=&#39;txt-block&#39;]&quot;</span>)<span class="op">%&gt;%</span><span class="st"> </span></span>
+<span id="cb4-11"><a href="#cb4-11"></a><span class="st">  </span><span class="kw">html_text</span>(<span class="dt">trim =</span> T)<span class="op">%&gt;%</span></span>
+<span id="cb4-12"><a href="#cb4-12"></a><span class="st">  </span><span class="kw">str_replace_all</span>(<span class="st">&quot;</span><span class="ch">\\</span><span class="st">n</span><span class="ch">\\</span><span class="st">s+&quot;</span>,<span class="st">&quot;_&quot;</span>)<span class="op">%&gt;%</span></span>
+<span id="cb4-13"><a href="#cb4-13"></a><span class="st">  </span><span class="kw">str_replace_all</span>(<span class="st">&quot;:_&quot;</span>,<span class="st">&quot;:&quot;</span>)<span class="op">%&gt;%</span></span>
+<span id="cb4-14"><a href="#cb4-14"></a><span class="st">  </span><span class="co"># make it a tibble</span></span>
+<span id="cb4-15"><a href="#cb4-15"></a><span class="st">  </span><span class="kw">tibble</span>(<span class="dt">x =</span> .) <span class="op">%&gt;%</span></span>
+<span id="cb4-16"><a href="#cb4-16"></a><span class="st">  </span><span class="kw">separate</span>(<span class="dt">col =</span> <span class="st">&quot;x&quot;</span>, <span class="dt">sep =</span> <span class="st">&quot;:&quot;</span>, <span class="dt">into =</span> <span class="kw">c</span>(<span class="st">&quot;x&quot;</span>, <span class="st">&quot;y&quot;</span>),</span>
+<span id="cb4-17"><a href="#cb4-17"></a>             <span class="dt">fill =</span> <span class="st">&quot;right&quot;</span>, <span class="dt">extra =</span> <span class="st">&quot;drop&quot;</span>)<span class="op">%&gt;%</span></span>
+<span id="cb4-18"><a href="#cb4-18"></a><span class="st">  </span><span class="co"># keep variables of interest</span></span>
+<span id="cb4-19"><a href="#cb4-19"></a><span class="st">  </span><span class="kw">filter</span>(x <span class="op">%in%</span><span class="st"> </span><span class="kw">c</span>(<span class="st">&quot;Country&quot;</span>, <span class="st">&quot;Language&quot;</span>, <span class="st">&quot;Budget&quot;</span>,</span>
+<span id="cb4-20"><a href="#cb4-20"></a>                  <span class="st">&quot;Opening Weekend USA&quot;</span>, <span class="st">&quot;Gross USA&quot;</span>, <span class="st">&quot;Cumulative Worldwide Gross&quot;</span>,</span>
+<span id="cb4-21"><a href="#cb4-21"></a>                  <span class="st">&quot;Runtime&quot;</span>,<span class="st">&quot;Color&quot;</span>))<span class="op">%&gt;%</span></span>
+<span id="cb4-22"><a href="#cb4-22"></a><span class="st">  </span><span class="kw">mutate</span>(<span class="dt">y =</span> <span class="kw">str_trim</span>(y), </span>
+<span id="cb4-23"><a href="#cb4-23"></a>         <span class="dt">x=</span> <span class="kw">str_to_lower</span>(x) <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">str_replace_all</span>(<span class="st">&quot;</span><span class="ch">\\</span><span class="st">s&quot;</span>, <span class="st">&quot;_&quot;</span>)) <span class="op">%&gt;%</span></span>
+<span id="cb4-24"><a href="#cb4-24"></a><span class="st">  </span><span class="co"># fill NAs</span></span>
+<span id="cb4-25"><a href="#cb4-25"></a><span class="st">  </span><span class="kw">complete</span>(</span>
+<span id="cb4-26"><a href="#cb4-26"></a>    <span class="dt">x =</span> <span class="kw">c</span>(<span class="st">&quot;country&quot;</span>, <span class="st">&quot;language&quot;</span>, <span class="st">&quot;color&quot;</span>, <span class="st">&quot;runtime&quot;</span>, <span class="st">&quot;budget&quot;</span>,</span>
+<span id="cb4-27"><a href="#cb4-27"></a>          <span class="st">&quot;opening_weekend_usa&quot;</span>, <span class="st">&quot;gross_usa&quot;</span>, <span class="st">&quot;cumulative_worldwide_gross&quot;</span>))</span>
+<span id="cb4-28"><a href="#cb4-28"></a>  out &lt;-<span class="st"> </span><span class="kw">as.list</span>(tmp<span class="op">$</span>y) <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">setNames</span>(tmp<span class="op">$</span>x)</span>
+<span id="cb4-29"><a href="#cb4-29"></a>  <span class="kw">return</span>(out)</span>
+<span id="cb4-30"><a href="#cb4-30"></a>}</span>
+<span id="cb4-31"><a href="#cb4-31"></a><span class="kw">extrac_p1</span>(content_<span class="dv">1</span>_main)</span></code></pre></div>
+<pre><code>## $budget
+## [1] &quot;$58,000,000_(estimated)&quot;
+## 
+## $color
+## [1] &quot;Color&quot;
+## 
+## $country
+## [1] &quot;USA&quot;
+## 
+## $cumulative_worldwide_gross
+## [1] &quot;$316,791,257&quot;
+## 
+## $gross_usa
+## [1] &quot;$170,742,341&quot;
+## 
+## $language
+## [1] &quot;English&quot;
+## 
+## $opening_weekend_usa
+## [1] &quot;$367,151,\n23 December 2001&quot;
+## 
+## $runtime
+## [1] &quot;135 min&quot;</code></pre>
+<p>From another section of the main page, we extracted genre(s), plot keywords of the movie</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1"></a><span class="co"># sub-routine</span></span>
+<span id="cb6-2"><a href="#cb6-2"></a>extrac_p1_<span class="dv">2</span> &lt;-<span class="st"> </span><span class="cf">function</span>(content){</span>
+<span id="cb6-3"><a href="#cb6-3"></a>  <span class="co">## temporary container for genre/plot keyword</span></span>
+<span id="cb6-4"><a href="#cb6-4"></a>  tmp &lt;-<span class="st"> </span>content <span class="op">%&gt;%</span><span class="st"> </span></span>
+<span id="cb6-5"><a href="#cb6-5"></a><span class="st">    </span><span class="kw">html_nodes</span>(<span class="dt">xpath =</span> <span class="st">&quot;//div[@id=&#39;titleStoryLine&#39;]/div&quot;</span>)<span class="op">%&gt;%</span></span>
+<span id="cb6-6"><a href="#cb6-6"></a><span class="st">    </span><span class="kw">html_text</span>(<span class="dt">trim =</span> T)<span class="op">%&gt;%</span></span>
+<span id="cb6-7"><a href="#cb6-7"></a><span class="st">    </span><span class="kw">tibble</span>(<span class="dt">x =</span> .) <span class="op">%&gt;%</span></span>
+<span id="cb6-8"><a href="#cb6-8"></a><span class="st">    </span><span class="kw">separate</span>(<span class="dt">col =</span> <span class="st">&quot;x&quot;</span>, <span class="dt">sep =</span> <span class="st">&quot;:</span><span class="ch">\\</span><span class="st">n&quot;</span>, <span class="dt">into =</span> <span class="kw">c</span>(<span class="st">&quot;x&quot;</span>, <span class="st">&quot;y&quot;</span>), <span class="dt">fill =</span> <span class="st">&quot;right&quot;</span>, <span class="dt">extra =</span> <span class="st">&quot;drop&quot;</span>)<span class="op">%&gt;%</span></span>
+<span id="cb6-9"><a href="#cb6-9"></a><span class="st">    </span><span class="kw">filter</span>(x <span class="op">%in%</span><span class="kw">c</span>(<span class="st">&quot;Genres&quot;</span>, <span class="st">&quot;Plot Keywords&quot;</span>))<span class="op">%&gt;%</span></span>
+<span id="cb6-10"><a href="#cb6-10"></a><span class="st">    </span><span class="kw">mutate</span>(<span class="dt">y =</span> <span class="kw">str_replace_all</span>(y, <span class="st">&quot;</span><span class="ch">\\</span><span class="st">n&quot;</span>,<span class="st">&quot;&quot;</span>) <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">str_replace_all</span>(<span class="st">&quot;</span><span class="ch">\\</span><span class="st">s+&quot;</span>,<span class="st">&quot;&quot;</span>),</span>
+<span id="cb6-11"><a href="#cb6-11"></a>           <span class="dt">x=</span> <span class="kw">str_to_lower</span>(x)<span class="op">%&gt;%</span><span class="st"> </span><span class="kw">str_replace_all</span>(<span class="st">&quot;</span><span class="ch">\\</span><span class="st">s&quot;</span>, <span class="st">&quot;_&quot;</span>))<span class="op">%&gt;%</span></span>
+<span id="cb6-12"><a href="#cb6-12"></a><span class="st">    </span><span class="co"># fill NAs</span></span>
+<span id="cb6-13"><a href="#cb6-13"></a><span class="st">    </span><span class="kw">complete</span>(<span class="dt">x =</span> <span class="kw">c</span>(<span class="st">&quot;plot_keywords&quot;</span>, <span class="st">&quot;genres&quot;</span>))</span>
+<span id="cb6-14"><a href="#cb6-14"></a>  </span>
+<span id="cb6-15"><a href="#cb6-15"></a>  <span class="co"># output list</span></span>
+<span id="cb6-16"><a href="#cb6-16"></a>  out &lt;-<span class="st"> </span><span class="kw">as.list</span>(tmp<span class="op">$</span>y) <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">setNames</span>(tmp<span class="op">$</span>x)</span>
+<span id="cb6-17"><a href="#cb6-17"></a>  </span>
+<span id="cb6-18"><a href="#cb6-18"></a>  out<span class="op">$</span>plot_keywords &lt;-<span class="st"> </span>out<span class="op">$</span>plot_keywords<span class="op">%&gt;%</span><span class="st"> </span><span class="kw">str_split</span>(<span class="st">&quot;</span><span class="ch">\\</span><span class="st">|&quot;</span>) <span class="op">%&gt;%</span><span class="st"> </span></span>
+<span id="cb6-19"><a href="#cb6-19"></a><span class="st">    </span><span class="kw">unlist</span>() <span class="op">%&gt;%</span><span class="st"> </span>.[<span class="kw">str_sub</span>(.,<span class="dv">1</span>,<span class="dv">6</span>) <span class="op">!=</span><span class="st"> &quot;SeeAll&quot;</span>] <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">str_to_lower</span>()</span>
+<span id="cb6-20"><a href="#cb6-20"></a>  </span>
+<span id="cb6-21"><a href="#cb6-21"></a>  out<span class="op">$</span>genres &lt;-<span class="st"> </span>out<span class="op">$</span>genres<span class="op">%&gt;%</span><span class="st"> </span><span class="kw">str_split</span>(<span class="st">&quot;</span><span class="ch">\\</span><span class="st">|&quot;</span>) <span class="op">%&gt;%</span><span class="st"> </span></span>
+<span id="cb6-22"><a href="#cb6-22"></a><span class="st">    </span><span class="kw">unlist</span>() <span class="op">%&gt;%</span><span class="st"> </span>.[<span class="kw">str_sub</span>(.,<span class="dv">1</span>,<span class="dv">6</span>) <span class="op">!=</span><span class="st"> &quot;SeeAll&quot;</span>] <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">str_to_lower</span>()</span>
+<span id="cb6-23"><a href="#cb6-23"></a>  out</span>
+<span id="cb6-24"><a href="#cb6-24"></a>}</span>
+<span id="cb6-25"><a href="#cb6-25"></a><span class="kw">extrac_p1_2</span>(content_<span class="dv">1</span>_main)[[<span class="dv">2</span>]] <span class="co"># shoe genres for example</span></span></code></pre></div>
+<pre><code>## [1] &quot;mathematician&quot; &quot;mentalillness&quot; &quot;schizophrenia&quot; &quot;nobelprize&quot;   
+## [5] &quot;gametheory&quot;</code></pre>
 </div>
 <div id="credit-list" class="section level4">
 <h4>2.2 Credit list</h4>
+<p>Next, we want to retrieve the director(s), writer(s), and cast for the movie collaboration analysis. There are three tables in the <a href="https://www.imdb.com/title/tt0268978/fullcredits">credit list</a>, with the header <code>director</code>, <code>writer</code>, and <code>cast.</code> The following annotated code retrieves these three tables, turns them into vector of names, and saves them in to the list <code>p2</code>.</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1"></a><span class="co"># load page</span></span>
+<span id="cb8-2"><a href="#cb8-2"></a>content_<span class="dv">2</span>_cred &lt;-<span class="st"> </span><span class="kw">paste0</span>(<span class="st">&quot;https://www.imdb.com/title/&quot;</span>, iID, <span class="st">&quot;/fullcredits&quot;</span>) <span class="op">%&gt;%</span></span>
+<span id="cb8-3"><a href="#cb8-3"></a><span class="st">    </span><span class="kw">load_page</span>()</span>
+<span id="cb8-4"><a href="#cb8-4"></a></span>
+<span id="cb8-5"><a href="#cb8-5"></a><span class="co"># sub-routine</span></span>
+<span id="cb8-6"><a href="#cb8-6"></a>extrac_p2 &lt;-<span class="st"> </span><span class="cf">function</span>(content){</span>
+<span id="cb8-7"><a href="#cb8-7"></a>  content &lt;-<span class="st"> </span>content <span class="op">%&gt;%</span><span class="st"> </span></span>
+<span id="cb8-8"><a href="#cb8-8"></a><span class="st">    </span><span class="kw">html_nodes</span>(<span class="dt">xpath =</span> <span class="st">&quot;//div[@id=&#39;fullcredits_content&#39;]&quot;</span>) </span>
+<span id="cb8-9"><a href="#cb8-9"></a>  <span class="co"># get headers</span></span>
+<span id="cb8-10"><a href="#cb8-10"></a>  hds &lt;-<span class="st"> </span>content <span class="op">%&gt;%</span><span class="st"> </span></span>
+<span id="cb8-11"><a href="#cb8-11"></a><span class="st">      </span><span class="kw">html_nodes</span>(<span class="dt">xpath =</span> <span class="st">&quot;h4&quot;</span>)<span class="op">%&gt;%</span></span>
+<span id="cb8-12"><a href="#cb8-12"></a><span class="st">      </span><span class="kw">html_attr</span>(<span class="dt">name=</span><span class="st">&quot;name&quot;</span>)</span>
+<span id="cb8-13"><a href="#cb8-13"></a>  <span class="co"># get tables</span></span>
+<span id="cb8-14"><a href="#cb8-14"></a>  tabs &lt;-<span class="st"> </span>content <span class="op">%&gt;%</span><span class="st"> </span></span>
+<span id="cb8-15"><a href="#cb8-15"></a><span class="st">      </span><span class="kw">html_nodes</span>(<span class="dt">xpath =</span> <span class="st">&quot;table&quot;</span>)</span>
+<span id="cb8-16"><a href="#cb8-16"></a>  <span class="co"># create containers</span></span>
+<span id="cb8-17"><a href="#cb8-17"></a>  director &lt;-<span class="st"> </span><span class="ot">NULL</span></span>
+<span id="cb8-18"><a href="#cb8-18"></a>  writer &lt;-<span class="st"> </span><span class="ot">NULL</span></span>
+<span id="cb8-19"><a href="#cb8-19"></a>  cast &lt;-<span class="st"> </span><span class="ot">NULL</span></span>
+<span id="cb8-20"><a href="#cb8-20"></a>  <span class="co"># retrieve the vector of director names</span></span>
+<span id="cb8-21"><a href="#cb8-21"></a>  <span class="cf">if</span>(<span class="st">&quot;director&quot;</span><span class="op">%in%</span>hds){</span>
+<span id="cb8-22"><a href="#cb8-22"></a>    director &lt;-<span class="st"> </span>tabs[[<span class="kw">which</span>(hds <span class="op">==</span><span class="st"> &quot;director&quot;</span>)]]<span class="op">%&gt;%</span></span>
+<span id="cb8-23"><a href="#cb8-23"></a><span class="st">      </span><span class="kw">html_nodes</span>(<span class="dt">xpath =</span> <span class="st">&quot;tbody/tr/td/a[@href]&quot;</span>)<span class="op">%&gt;%</span></span>
+<span id="cb8-24"><a href="#cb8-24"></a><span class="st">      </span><span class="kw">html_text</span>(<span class="dt">trim =</span> T)</span>
+<span id="cb8-25"><a href="#cb8-25"></a>  }</span>
+<span id="cb8-26"><a href="#cb8-26"></a>  <span class="co"># retrieve the vector of writer names</span></span>
+<span id="cb8-27"><a href="#cb8-27"></a>  <span class="cf">if</span>(<span class="st">&quot;writer&quot;</span><span class="op">%in%</span>hds){</span>
+<span id="cb8-28"><a href="#cb8-28"></a>    writer &lt;-<span class="st"> </span>tabs[[<span class="kw">which</span>(hds <span class="op">==</span><span class="st"> &quot;writer&quot;</span>)]]<span class="op">%&gt;%</span></span>
+<span id="cb8-29"><a href="#cb8-29"></a><span class="st">      </span><span class="kw">html_nodes</span>(<span class="dt">xpath =</span> <span class="st">&quot;tbody/tr/td/a[@href]&quot;</span>)<span class="op">%&gt;%</span></span>
+<span id="cb8-30"><a href="#cb8-30"></a><span class="st">      </span><span class="kw">html_text</span>(<span class="dt">trim =</span> T)</span>
+<span id="cb8-31"><a href="#cb8-31"></a>  }</span>
+<span id="cb8-32"><a href="#cb8-32"></a>  <span class="co"># retrieve the vector of cast names</span></span>
+<span id="cb8-33"><a href="#cb8-33"></a>  <span class="cf">if</span>(<span class="st">&quot;cast&quot;</span><span class="op">%in%</span>hds){</span>
+<span id="cb8-34"><a href="#cb8-34"></a>    cast &lt;-<span class="st"> </span>tabs[[<span class="kw">which</span>(hds <span class="op">==</span><span class="st"> &quot;cast&quot;</span>)]]<span class="op">%&gt;%</span><span class="st"> </span></span>
+<span id="cb8-35"><a href="#cb8-35"></a><span class="st">      </span><span class="kw">html_nodes</span>(<span class="dt">xpath =</span> <span class="st">&quot;tr/td[not(@class)]/a[@href]&quot;</span>)<span class="op">%&gt;%</span></span>
+<span id="cb8-36"><a href="#cb8-36"></a><span class="st">      </span><span class="kw">html_text</span>(<span class="dt">trim =</span> T)</span>
+<span id="cb8-37"><a href="#cb8-37"></a>  } </span>
+<span id="cb8-38"><a href="#cb8-38"></a>  <span class="kw">list</span>(<span class="dt">director =</span> director, <span class="dt">writer =</span> writer, <span class="dt">cast =</span> cast)</span>
+<span id="cb8-39"><a href="#cb8-39"></a>}</span>
+<span id="cb8-40"><a href="#cb8-40"></a></span>
+<span id="cb8-41"><a href="#cb8-41"></a><span class="kw">extrac_p2</span>(content_<span class="dv">2</span>_cred)<span class="op">$</span>director <span class="co"># just print the director(s) as an example</span></span></code></pre></div>
+<pre><code>## [1] &quot;Ron Howard&quot;</code></pre>
 </div>
 <div id="rating-scores" class="section level4">
 <h4>2.3 Rating scores</h4>
+<p>Then, we want the most important outcome variable, the IMDb rating from users, which we will use it to define success of a movie, and the performance score of a actor/actress get from starring in a movie.</p>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1"></a><span class="co"># load page</span></span>
+<span id="cb10-2"><a href="#cb10-2"></a>content_<span class="dv">3</span>_rating &lt;-<span class="st"> </span><span class="kw">paste0</span>(<span class="st">&quot;https://www.imdb.com/title/&quot;</span>, iID, <span class="st">&quot;/ratings&quot;</span>) <span class="op">%&gt;%</span></span>
+<span id="cb10-3"><a href="#cb10-3"></a><span class="st">    </span><span class="kw">load_page</span>()</span>
+<span id="cb10-4"><a href="#cb10-4"></a></span>
+<span id="cb10-5"><a href="#cb10-5"></a></span>
+<span id="cb10-6"><a href="#cb10-6"></a><span class="co"># sub-routine</span></span>
+<span id="cb10-7"><a href="#cb10-7"></a>extrac_p3 &lt;-<span class="st"> </span><span class="cf">function</span>(content){</span>
+<span id="cb10-8"><a href="#cb10-8"></a>  <span class="co"># temporary container for the rating table</span></span>
+<span id="cb10-9"><a href="#cb10-9"></a>  tmp &lt;-<span class="st"> </span>content <span class="op">%&gt;%</span></span>
+<span id="cb10-10"><a href="#cb10-10"></a><span class="st">      </span><span class="kw">html_nodes</span>(<span class="dt">xpath =</span> <span class="st">&quot;//*[@id=&#39;main&#39;]/section/div/div[3]/div/table[2]&quot;</span>)<span class="op">%&gt;%</span></span>
+<span id="cb10-11"><a href="#cb10-11"></a><span class="st">      </span><span class="kw">html_table</span>(<span class="dt">trim =</span> T)</span>
+<span id="cb10-12"><a href="#cb10-12"></a>  <span class="cf">if</span>(<span class="kw">length</span>(tmp) <span class="op">&gt;</span><span class="st"> </span><span class="dv">0</span> ){</span>
+<span id="cb10-13"><a href="#cb10-13"></a>    <span class="co"># for movies with IMDb ratings, extract the overall, male and female ratings </span></span>
+<span id="cb10-14"><a href="#cb10-14"></a>    <span class="co"># and the number of votes recieved</span></span>
+<span id="cb10-15"><a href="#cb10-15"></a>    out &lt;-<span class="st"> </span>tmp <span class="op">%&gt;%</span><span class="st"> </span>.[[<span class="dv">1</span>]] <span class="op">%&gt;%</span></span>
+<span id="cb10-16"><a href="#cb10-16"></a><span class="st">      </span><span class="kw">lapply</span>(<span class="cf">function</span>(x) <span class="kw">str_replace_all</span>(x, <span class="st">&quot;</span><span class="ch">\\</span><span class="st">n</span><span class="ch">\\</span><span class="st">s+&quot;</span>,<span class="st">&quot;_&quot;</span>)) <span class="op">%&gt;%</span></span>
+<span id="cb10-17"><a href="#cb10-17"></a><span class="st">      </span><span class="kw">lapply</span>(<span class="cf">function</span>(x) <span class="kw">str_replace_all</span>(x, <span class="st">&quot;,&quot;</span>,<span class="st">&quot;&quot;</span>)) <span class="op">%&gt;%</span><span class="st"> </span>.[[<span class="dv">2</span>]]<span class="op">%&gt;%</span></span>
+<span id="cb10-18"><a href="#cb10-18"></a><span class="st">      </span><span class="kw">tibble</span>(<span class="dt">x =</span> ., <span class="dt">sex =</span> <span class="kw">c</span>(<span class="st">&quot;all&quot;</span>, <span class="st">&quot;male&quot;</span>, <span class="st">&quot;female&quot;</span>))<span class="op">%&gt;%</span></span>
+<span id="cb10-19"><a href="#cb10-19"></a><span class="st">      </span><span class="kw">separate</span>(<span class="dt">col =</span> <span class="st">&quot;x&quot;</span>,<span class="dt">sep=</span><span class="st">&quot;_&quot;</span>, <span class="dt">into =</span> <span class="kw">c</span>(<span class="st">&quot;rating&quot;</span>, <span class="st">&quot;vote&quot;</span>), <span class="dt">convert =</span> F, </span>
+<span id="cb10-20"><a href="#cb10-20"></a>               <span class="dt">fill =</span> <span class="st">&quot;right&quot;</span>, <span class="dt">extra =</span> <span class="st">&quot;drop&quot;</span>) <span class="op">%&gt;%</span></span>
+<span id="cb10-21"><a href="#cb10-21"></a><span class="st">      </span><span class="kw">pivot_wider</span>(<span class="dt">values_from =</span> <span class="kw">c</span>(<span class="st">&quot;rating&quot;</span>, <span class="st">&quot;vote&quot;</span>), <span class="dt">names_from =</span> <span class="st">&quot;sex&quot;</span>) <span class="op">%&gt;%</span></span>
+<span id="cb10-22"><a href="#cb10-22"></a><span class="st">      </span><span class="kw">as.list</span>()</span>
+<span id="cb10-23"><a href="#cb10-23"></a>  } <span class="cf">else</span>{</span>
+<span id="cb10-24"><a href="#cb10-24"></a>    <span class="co"># some movie has no ratings or the table at all</span></span>
+<span id="cb10-25"><a href="#cb10-25"></a>    out &lt;-<span class="st"> </span><span class="kw">list</span>(<span class="dt">rating_all =</span> <span class="ot">NA_character_</span>, <span class="dt">rating_male =</span> <span class="ot">NA_character_</span>,</span>
+<span id="cb10-26"><a href="#cb10-26"></a>               <span class="dt">rating_female =</span> <span class="ot">NA_character_</span>,</span>
+<span id="cb10-27"><a href="#cb10-27"></a>               <span class="dt">vote_all =</span> <span class="ot">NA_character_</span>, <span class="dt">vote_male =</span> <span class="ot">NA_character_</span>,</span>
+<span id="cb10-28"><a href="#cb10-28"></a>               <span class="dt">vote_female =</span> <span class="ot">NA_character_</span>)</span>
+<span id="cb10-29"><a href="#cb10-29"></a>  }</span>
+<span id="cb10-30"><a href="#cb10-30"></a>  out</span>
+<span id="cb10-31"><a href="#cb10-31"></a>}</span>
+<span id="cb10-32"><a href="#cb10-32"></a><span class="kw">extrac_p3</span>(content_<span class="dv">3</span>_rating)</span></code></pre></div>
+<pre><code>## $rating_all
+## [1] &quot;8.2&quot;
+## 
+## $rating_male
+## [1] &quot;8.2&quot;
+## 
+## $rating_female
+## [1] &quot;8.2&quot;
+## 
+## $vote_all
+## [1] &quot;840194&quot;
+## 
+## $vote_male
+## [1] &quot;500168&quot;
+## 
+## $vote_female
+## [1] &quot;127402&quot;</code></pre>
 </div>
 <div id="awards" class="section level4">
 <h4>2.4 Awards</h4>
+<p>Another important variable to define movie success is the awards wined or nominated. In each <a href="https://www.imdb.com/title/tt0268978/awards">award lists</a>. The will be a short description of the numbers of awards wined and nominated by the movie. We parse the short paragraph to get these variables. In addition, we’d like to know whether the movie wins or nominated by Oscars, the most prominent award we’ve heard. We extract these variable by looking for <code>WinnerOscar</code> and <code>NomineeOscar</code> in the awards table of the movie.</p>
+<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1"></a><span class="co"># load page</span></span>
+<span id="cb12-2"><a href="#cb12-2"></a>content_<span class="dv">4</span>_award &lt;-<span class="st"> </span><span class="kw">paste0</span>(<span class="st">&quot;https://www.imdb.com/title/&quot;</span>, iID, <span class="st">&quot;/awards&quot;</span>) <span class="op">%&gt;%</span></span>
+<span id="cb12-3"><a href="#cb12-3"></a><span class="st">    </span><span class="kw">load_page</span>()</span>
+<span id="cb12-4"><a href="#cb12-4"></a></span>
+<span id="cb12-5"><a href="#cb12-5"></a><span class="co"># sub-routine</span></span>
+<span id="cb12-6"><a href="#cb12-6"></a>extrac_p4 &lt;-<span class="st"> </span><span class="cf">function</span>(content){</span>
+<span id="cb12-7"><a href="#cb12-7"></a>   <span class="co"># temporary container for the description paragraph</span></span>
+<span id="cb12-8"><a href="#cb12-8"></a>  tmp &lt;-<span class="st"> </span>content<span class="op">%&gt;%</span></span>
+<span id="cb12-9"><a href="#cb12-9"></a><span class="st">    </span><span class="kw">html_nodes</span>(<span class="dt">xpath =</span> <span class="st">&quot;//div[@class=&#39;desc&#39;]&quot;</span>) <span class="op">%&gt;%</span></span>
+<span id="cb12-10"><a href="#cb12-10"></a><span class="st">    </span><span class="kw">html_text</span>(<span class="dt">trim =</span> T)</span>
+<span id="cb12-11"><a href="#cb12-11"></a>  <span class="co"># parse for the no. of awards wined</span></span>
+<span id="cb12-12"><a href="#cb12-12"></a>  award_win &lt;-<span class="st"> </span><span class="kw">ifelse</span>(</span>
+<span id="cb12-13"><a href="#cb12-13"></a>    <span class="kw">length</span>(tmp) <span class="op">==</span><span class="st"> </span><span class="dv">0</span>, <span class="st">&quot;0&quot;</span>, </span>
+<span id="cb12-14"><a href="#cb12-14"></a>    tmp <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">str_extract</span>(<span class="st">&quot;</span><span class="ch">\\</span><span class="st">d+</span><span class="ch">\\</span><span class="st">swins&quot;</span>) <span class="op">%&gt;%</span><span class="st"> </span></span>
+<span id="cb12-15"><a href="#cb12-15"></a><span class="st">      </span><span class="kw">str_split</span>(<span class="st">&quot;</span><span class="ch">\\</span><span class="st">s&quot;</span>) <span class="op">%&gt;%</span><span class="st"> </span>.[[<span class="dv">1</span>]] <span class="op">%&gt;%</span><span class="st"> </span>.[<span class="dv">1</span>]  )</span>
+<span id="cb12-16"><a href="#cb12-16"></a>  <span class="co"># parse for the no. of awards nominatedd</span></span>
+<span id="cb12-17"><a href="#cb12-17"></a>  award_nom &lt;-<span class="st"> </span><span class="kw">ifelse</span>(</span>
+<span id="cb12-18"><a href="#cb12-18"></a>    <span class="kw">length</span>(tmp) <span class="op">==</span><span class="st"> </span><span class="dv">0</span>, <span class="st">&quot;0&quot;</span>, </span>
+<span id="cb12-19"><a href="#cb12-19"></a>    tmp <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">str_extract</span>(<span class="st">&quot;</span><span class="ch">\\</span><span class="st">d+</span><span class="ch">\\</span><span class="st">snomination&quot;</span>) <span class="op">%&gt;%</span><span class="st"> </span></span>
+<span id="cb12-20"><a href="#cb12-20"></a><span class="st">      </span><span class="kw">str_split</span>(<span class="st">&quot;</span><span class="ch">\\</span><span class="st">s&quot;</span>) <span class="op">%&gt;%</span><span class="st"> </span>.[[<span class="dv">1</span>]] <span class="op">%&gt;%</span><span class="st"> </span>.[<span class="dv">1</span>] )</span>
+<span id="cb12-21"><a href="#cb12-21"></a>  <span class="co"># temporary container for the award table</span></span>
+<span id="cb12-22"><a href="#cb12-22"></a>  tmp2 &lt;-<span class="st"> </span>content<span class="op">%&gt;%</span></span>
+<span id="cb12-23"><a href="#cb12-23"></a><span class="st">      </span><span class="kw">html_nodes</span>(<span class="dt">xpath =</span> <span class="st">&quot;//table[@class=&#39;awards&#39;]/tr/td[@class = &#39;title_award_outcome&#39;]&quot;</span>)<span class="op">%&gt;%</span></span>
+<span id="cb12-24"><a href="#cb12-24"></a><span class="st">      </span><span class="kw">html_text</span>(<span class="dt">trim =</span> T)</span>
+<span id="cb12-25"><a href="#cb12-25"></a>  <span class="kw">list</span>(</span>
+<span id="cb12-26"><a href="#cb12-26"></a>    <span class="dt">award_win =</span> award_win ,</span>
+<span id="cb12-27"><a href="#cb12-27"></a>    <span class="dt">award_nom =</span> award_nom,</span>
+<span id="cb12-28"><a href="#cb12-28"></a>    <span class="dt">winner_oscar =</span> <span class="kw">ifelse</span>(<span class="st">&quot;WinnerOscar&quot;</span> <span class="op">%in%</span><span class="st"> </span>tmp2, <span class="st">&quot;1&quot;</span>, <span class="st">&quot;0&quot;</span>) ,</span>
+<span id="cb12-29"><a href="#cb12-29"></a>    <span class="dt">nominee_oscar =</span> <span class="kw">ifelse</span>(<span class="st">&quot;NomineeOscar&quot;</span> <span class="op">%in%</span><span class="st"> </span>tmp2, <span class="st">&quot;1&quot;</span>, <span class="st">&quot;0&quot;</span>)</span>
+<span id="cb12-30"><a href="#cb12-30"></a>  )</span>
+<span id="cb12-31"><a href="#cb12-31"></a>}</span>
+<span id="cb12-32"><a href="#cb12-32"></a><span class="kw">extrac_p4</span>(content_<span class="dv">4</span>_award)</span></code></pre></div>
+<pre><code>## $award_win
+## [1] &quot;37&quot;
+## 
+## $award_nom
+## [1] &quot;69&quot;
+## 
+## $winner_oscar
+## [1] &quot;1&quot;
+## 
+## $nominee_oscar
+## [1] &quot;1&quot;</code></pre>
 </div>
-<div id="taglines" class="section level4">
-<h4>2.5 Taglines</h4>
+<div id="taglines-quotes-mpaa-rating" class="section level4">
+<h4>2.5 Taglines/ Quotes/ MPAA rating</h4>
+<p>Finally, we also extracted some other information of a movie (these variable are eventually not used in the subsequent analysis), like taglines, and quotes.</p>
+<div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1"></a><span class="co">## taglines</span></span>
+<span id="cb14-2"><a href="#cb14-2"></a>content_<span class="dv">5</span>_taglines &lt;-<span class="st"> </span><span class="kw">paste0</span>(<span class="st">&quot;https://www.imdb.com/title/&quot;</span>, iID,<span class="st">&quot;/taglines&quot;</span>) <span class="op">%&gt;%</span></span>
+<span id="cb14-3"><a href="#cb14-3"></a><span class="st">  </span><span class="kw">load_page</span>()</span>
+<span id="cb14-4"><a href="#cb14-4"></a></span>
+<span id="cb14-5"><a href="#cb14-5"></a><span class="co"># sub-routine</span></span>
+<span id="cb14-6"><a href="#cb14-6"></a>extrac_p5 &lt;-<span class="st"> </span><span class="cf">function</span>(content){</span>
+<span id="cb14-7"><a href="#cb14-7"></a>  <span class="co"># temporary container for the taglines</span></span>
+<span id="cb14-8"><a href="#cb14-8"></a>  tmp &lt;-<span class="st"> </span>content <span class="op">%&gt;%</span><span class="st"> </span></span>
+<span id="cb14-9"><a href="#cb14-9"></a><span class="st">    </span><span class="kw">html_nodes</span>(<span class="dt">xpath =</span> <span class="st">&quot;//div[@id=&#39;taglines_content&#39;]/div[@class!=&#39;header&#39;]&quot;</span>)</span>
+<span id="cb14-10"><a href="#cb14-10"></a>  <span class="co"># extract those having taglines</span></span>
+<span id="cb14-11"><a href="#cb14-11"></a>  <span class="cf">if</span>( <span class="kw">any</span>(<span class="kw">str_detect</span>(<span class="kw">html_attr</span>(tmp, <span class="dt">name =</span> <span class="st">&quot;class&quot;</span>), <span class="st">&quot;soda&quot;</span>)) ){</span>
+<span id="cb14-12"><a href="#cb14-12"></a>    tmp &lt;-<span class="st"> </span>tmp <span class="op">%&gt;%</span><span class="st">  </span><span class="kw">html_text</span>(<span class="dt">trim =</span> T)</span>
+<span id="cb14-13"><a href="#cb14-13"></a>    out &lt;-<span class="st"> </span>tmp[<span class="dv">1</span><span class="op">:</span><span class="kw">min</span>(<span class="dv">3</span>,<span class="kw">length</span>(tmp))] <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">list</span>(<span class="dt">taglines =</span> .)</span>
+<span id="cb14-14"><a href="#cb14-14"></a>  }<span class="cf">else</span>{</span>
+<span id="cb14-15"><a href="#cb14-15"></a>    out &lt;-<span class="st"> </span><span class="kw">list</span>(<span class="dt">taglines =</span> <span class="ot">NA_character_</span>)</span>
+<span id="cb14-16"><a href="#cb14-16"></a>  }</span>
+<span id="cb14-17"><a href="#cb14-17"></a>  out</span>
+<span id="cb14-18"><a href="#cb14-18"></a>}</span>
+<span id="cb14-19"><a href="#cb14-19"></a><span class="kw">extrac_p5</span>(content_<span class="dv">5</span>_taglines)</span></code></pre></div>
+<pre><code>## $taglines
+## [1] &quot;The Only Thing Greater Than the Power of the Mind is the Courage of the Heart&quot;
+## [2] &quot;He Saw The World In A Way No One Could Have Imagined.&quot;                        
+## [3] &quot;I need to believe that something extra ordinary is possible...&quot;</code></pre>
+<div class="sourceCode" id="cb16"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1"></a><span class="co">## quotes</span></span>
+<span id="cb16-2"><a href="#cb16-2"></a>content_<span class="dv">6</span>_quotes &lt;-<span class="st"> </span><span class="kw">paste0</span>(<span class="st">&quot;https://www.imdb.com/title/&quot;</span>, iID,<span class="st">&quot;/quotes&quot;</span>) <span class="op">%&gt;%</span></span>
+<span id="cb16-3"><a href="#cb16-3"></a><span class="st">  </span><span class="kw">load_page</span>()</span>
+<span id="cb16-4"><a href="#cb16-4"></a></span>
+<span id="cb16-5"><a href="#cb16-5"></a><span class="co"># sub-routine</span></span>
+<span id="cb16-6"><a href="#cb16-6"></a>extrac_p6 &lt;-<span class="st"> </span><span class="cf">function</span>(content){</span>
+<span id="cb16-7"><a href="#cb16-7"></a>  <span class="co"># temporary container for the quotes</span></span>
+<span id="cb16-8"><a href="#cb16-8"></a>  tmp &lt;-<span class="st"> </span>content <span class="op">%&gt;%</span><span class="st"> </span></span>
+<span id="cb16-9"><a href="#cb16-9"></a><span class="st">  </span><span class="kw">html_nodes</span>(</span>
+<span id="cb16-10"><a href="#cb16-10"></a>    <span class="dt">xpath =</span> <span class="st">&quot;//div[@id=&#39;quotes_content&#39;]/div[@class=&#39;list&#39;]/div/div[@class=&#39;sodatext&#39;]&quot;</span>)<span class="op">%&gt;%</span></span>
+<span id="cb16-11"><a href="#cb16-11"></a><span class="st">  </span><span class="kw">html_text</span>(<span class="dt">trim =</span> T)</span>
+<span id="cb16-12"><a href="#cb16-12"></a>  <span class="co"># extract those having quotes</span></span>
+<span id="cb16-13"><a href="#cb16-13"></a>  <span class="cf">if</span>(<span class="kw">length</span>(tmp) <span class="op">&gt;</span><span class="st"> </span><span class="dv">0</span>){</span>
+<span id="cb16-14"><a href="#cb16-14"></a>    out &lt;-<span class="st"> </span>tmp[<span class="dv">1</span><span class="op">:</span><span class="kw">min</span>(<span class="dv">3</span>,<span class="kw">length</span>(tmp))] <span class="op">%&gt;%</span><span class="st">  </span><span class="kw">list</span>(<span class="dt">quotes =</span> .)</span>
+<span id="cb16-15"><a href="#cb16-15"></a>  } <span class="cf">else</span> {</span>
+<span id="cb16-16"><a href="#cb16-16"></a>    out &lt;-<span class="st"> </span><span class="kw">list</span>(<span class="dt">quotes =</span> <span class="ot">NA_character_</span>)</span>
+<span id="cb16-17"><a href="#cb16-17"></a>  }</span>
+<span id="cb16-18"><a href="#cb16-18"></a>  out</span>
+<span id="cb16-19"><a href="#cb16-19"></a>}</span>
+<span id="cb16-20"><a href="#cb16-20"></a><span class="kw">extrac_p6</span>(content_<span class="dv">6</span>_quotes)</span></code></pre></div>
+<pre><code>## $quotes
+## [1] &quot;Dr. Rosen:\nImagine if you suddenly learned that the people, the places, the moments most important to you were not gone, not dead, but worse, had never been. What kind of hell would that be?&quot;                                                                                                                                                                         
+## [2] &quot;[from deleted scene]\n\nNash:\nPerhaps it is good to have a beautiful mind, but an even greater gift is to discover a beautiful heart.&quot;                                                                                                                                                                                                                                  
+## [3] &quot;Alicia:\nHow big is the universe? \nNash:\nInfinite. \nAlicia:\nHow do you know? \nNash:\nI know because all the data indicates it&#39;s infinite. \nAlicia:\nBut it hasn&#39;t been proven yet. \nNash:\nNo. \nAlicia:\nYou haven&#39;t seen it. \nNash:\nNo. \nAlicia:\nHow do you know for sure? \nNash:\nI don&#39;t, I just believe it. \nAlicia:\nIt&#39;s the same with love I guess.&quot;</code></pre>
 </div>
-<div id="quotes" class="section level4">
-<h4>2.6 Quotes</h4>
 </div>
-<div id="mpaa-rating" class="section level4">
-<h4>2.7 MPAA rating</h4>
-</div>
+<div id="putting-together" class="section level3">
+<h3>Putting together</h3>
+<p>All the above sub-tasks, are then combined into a wrapper function <code>scrape_one_film()</code> to scrape the information all at once. Also, a helper function <code>act_none()</code> is created to help deal with empty lists (for some not quite popular movies, few information is on IMDb).</p>
+<div class="sourceCode" id="cb18"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb18-1"><a href="#cb18-1"></a>act_none &lt;-<span class="st"> </span><span class="cf">function</span>(x){</span>
+<span id="cb18-2"><a href="#cb18-2"></a>  <span class="co"># we&#39;ll at times retrieve an empty list for a variable from a page</span></span>
+<span id="cb18-3"><a href="#cb18-3"></a>  <span class="co"># this replace them with NA_character_</span></span>
+<span id="cb18-4"><a href="#cb18-4"></a>  <span class="cf">if</span>(<span class="kw">length</span>(x) <span class="op">==</span><span class="st"> </span><span class="dv">0</span> ){ </span>
+<span id="cb18-5"><a href="#cb18-5"></a>    <span class="ot">NA_character_</span> </span>
+<span id="cb18-6"><a href="#cb18-6"></a>  } <span class="cf">else</span> <span class="cf">if</span> (<span class="kw">length</span>(x)<span class="op">==</span><span class="dv">1</span> <span class="op">&amp;</span><span class="st"> </span><span class="kw">is.na</span>(x[<span class="dv">1</span>])) {</span>
+<span id="cb18-7"><a href="#cb18-7"></a>    <span class="ot">NA_character_</span></span>
+<span id="cb18-8"><a href="#cb18-8"></a>  } <span class="cf">else</span> {x}</span>
+<span id="cb18-9"><a href="#cb18-9"></a>}</span>
+<span id="cb18-10"><a href="#cb18-10"></a></span>
+<span id="cb18-11"><a href="#cb18-11"></a>scrape_one_film &lt;-<span class="st"> </span><span class="cf">function</span>(iID, <span class="dt">title =</span> <span class="ot">NULL</span> , <span class="dt">year =</span> <span class="ot">NULL</span>){</span>
+<span id="cb18-12"><a href="#cb18-12"></a>  </span>
+<span id="cb18-13"><a href="#cb18-13"></a>  url &lt;-<span class="st"> </span><span class="kw">paste0</span>(<span class="st">&quot;https://www.imdb.com/title/&quot;</span>, iID)</span>
+<span id="cb18-14"><a href="#cb18-14"></a>  p0 &lt;-<span class="st"> </span><span class="kw">list</span>(<span class="dt">imdb_ID =</span> iID, <span class="dt">title =</span> title, <span class="dt">year =</span> year, <span class="dt">url =</span> url)</span>
+<span id="cb18-15"><a href="#cb18-15"></a>    </span>
+<span id="cb18-16"><a href="#cb18-16"></a>  content_<span class="dv">1</span>_main &lt;-<span class="st"> </span><span class="kw">load_page</span>(url)</span>
+<span id="cb18-17"><a href="#cb18-17"></a>  p1 &lt;-<span class="st"> </span><span class="kw">extrac_p1</span>(content_<span class="dv">1</span>_main)</span>
+<span id="cb18-18"><a href="#cb18-18"></a>  p1_<span class="dv">2</span> &lt;-<span class="st"> </span><span class="kw">extrac_p1_2</span>(content_<span class="dv">1</span>_main)</span>
+<span id="cb18-19"><a href="#cb18-19"></a>  </span>
+<span id="cb18-20"><a href="#cb18-20"></a>  p2 &lt;-<span class="st"> </span><span class="kw">paste0</span>(<span class="st">&quot;https://www.imdb.com/title/&quot;</span>, iID,<span class="st">&quot;/fullcredits&quot;</span>) <span class="op">%&gt;%</span></span>
+<span id="cb18-21"><a href="#cb18-21"></a><span class="st">    </span><span class="kw">load_page</span>() <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">extrac_p2</span>()</span>
+<span id="cb18-22"><a href="#cb18-22"></a>  </span>
+<span id="cb18-23"><a href="#cb18-23"></a>  p3 &lt;-<span class="st"> </span><span class="kw">paste0</span>(<span class="st">&quot;https://www.imdb.com/title/&quot;</span>, iID,<span class="st">&quot;/ratings&quot;</span>) <span class="op">%&gt;%</span></span>
+<span id="cb18-24"><a href="#cb18-24"></a><span class="st">    </span><span class="kw">load_page</span>() <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">extrac_p3</span>()</span>
+<span id="cb18-25"><a href="#cb18-25"></a>  </span>
+<span id="cb18-26"><a href="#cb18-26"></a>  p4 &lt;-<span class="st"> </span><span class="kw">paste0</span>(<span class="st">&quot;https://www.imdb.com/title/&quot;</span>, iID,<span class="st">&quot;/awards&quot;</span>) <span class="op">%&gt;%</span></span>
+<span id="cb18-27"><a href="#cb18-27"></a><span class="st">    </span><span class="kw">load_page</span>() <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">extrac_p4</span>()</span>
+<span id="cb18-28"><a href="#cb18-28"></a>  </span>
+<span id="cb18-29"><a href="#cb18-29"></a>  p5 &lt;-<span class="st"> </span><span class="kw">paste0</span>(<span class="st">&quot;https://www.imdb.com/title/&quot;</span>, iID,<span class="st">&quot;/taglines&quot;</span>) <span class="op">%&gt;%</span></span>
+<span id="cb18-30"><a href="#cb18-30"></a><span class="st">    </span><span class="kw">load_page</span>() <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">extrac_p5</span>()</span>
+<span id="cb18-31"><a href="#cb18-31"></a>  </span>
+<span id="cb18-32"><a href="#cb18-32"></a>  p6 &lt;-<span class="st"> </span><span class="kw">paste0</span>(<span class="st">&quot;https://www.imdb.com/title/&quot;</span>, iID,<span class="st">&quot;/quotes&quot;</span>) <span class="op">%&gt;%</span></span>
+<span id="cb18-33"><a href="#cb18-33"></a><span class="st">    </span><span class="kw">load_page</span>() <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">extrac_p6</span>()</span>
+<span id="cb18-34"><a href="#cb18-34"></a>  </span>
+<span id="cb18-35"><a href="#cb18-35"></a>  out &lt;-<span class="st"> </span><span class="kw">list</span>(p1, p1_<span class="dv">2</span>, p2, p3, p4, p5, p6)</span>
+<span id="cb18-36"><a href="#cb18-36"></a>  out &lt;-<span class="st"> </span><span class="kw">lapply</span>(out, act_none)</span>
+<span id="cb18-37"><a href="#cb18-37"></a>  <span class="kw">return</span>(out)</span>
+<span id="cb18-38"><a href="#cb18-38"></a>}</span></code></pre></div>
+<p>Then, we can finally us this wrapper function to iterate through the catalogs we constructed in <a href="#sec1">section 1</a> to scrape wll the information we want from IMDb. <code>scrape_year_film()</code> is created to iterate through all movies in one year, and it implements parallel process to speed up, as follows. After implementing this code, we found that sending http request sometimes fails after a long, continuous line of request, so we have to batch the requests to avoid this issue.</p>
+<div class="sourceCode" id="cb19"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb19-1"><a href="#cb19-1"></a><span class="co">### NOT RUN</span></span>
+<span id="cb19-2"><a href="#cb19-2"></a>scrape_year_film &lt;-<span class="st"> </span><span class="cf">function</span>(yr, <span class="dt">export =</span> T){</span>
+<span id="cb19-3"><a href="#cb19-3"></a>  </span>
+<span id="cb19-4"><a href="#cb19-4"></a>  <span class="co"># read catalog</span></span>
+<span id="cb19-5"><a href="#cb19-5"></a>  df &lt;-<span class="st"> </span><span class="kw">readRDS</span>(<span class="kw">paste0</span>(<span class="st">&quot;dat/FilmCatalog_yr&quot;</span>,yr,<span class="st">&quot;.RDS&quot;</span>))</span>
+<span id="cb19-6"><a href="#cb19-6"></a>  </span>
+<span id="cb19-7"><a href="#cb19-7"></a>  <span class="co"># batching</span></span>
+<span id="cb19-8"><a href="#cb19-8"></a>  dfls &lt;-<span class="st"> </span><span class="kw">split.data.frame</span>(df, (<span class="dv">0</span><span class="op">:</span>(<span class="kw">NROW</span>(df)<span class="op">-</span><span class="dv">1</span>)) <span class="op">%/%</span><span class="st"> </span><span class="dv">20</span> ) <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">unname</span>()</span>
+<span id="cb19-9"><a href="#cb19-9"></a>  </span>
+<span id="cb19-10"><a href="#cb19-10"></a>  <span class="co"># parallel</span></span>
+<span id="cb19-11"><a href="#cb19-11"></a>  <span class="kw">plan</span>(multiprocess, <span class="dt">workers =</span> <span class="dv">2</span>)</span>
+<span id="cb19-12"><a href="#cb19-12"></a>  res &lt;-<span class="st"> </span><span class="kw">future_lapply</span>(dfls, <span class="cf">function</span>(sdf){</span>
+<span id="cb19-13"><a href="#cb19-13"></a>    <span class="kw">Sys.sleep</span>(.<span class="dv">5</span>)</span>
+<span id="cb19-14"><a href="#cb19-14"></a>    <span class="kw">lapply</span>(<span class="dv">1</span><span class="op">:</span><span class="kw">NROW</span>(sdf), <span class="cf">function</span>(i){</span>
+<span id="cb19-15"><a href="#cb19-15"></a>      <span class="kw">scrape_one_film</span>(sdf<span class="op">$</span>imdb_ID[i],sdf<span class="op">$</span>title[i],sdf<span class="op">$</span>year[i]) }) <span class="op">%&gt;%</span></span>
+<span id="cb19-16"><a href="#cb19-16"></a><span class="st">      </span><span class="kw">setNames</span>(sdf<span class="op">$</span>imdb_ID)</span>
+<span id="cb19-17"><a href="#cb19-17"></a>  })</span>
+<span id="cb19-18"><a href="#cb19-18"></a>  <span class="kw">plan</span>(sequential)</span>
+<span id="cb19-19"><a href="#cb19-19"></a>  res &lt;-<span class="st"> </span><span class="kw">do.call</span>(<span class="st">&quot;c&quot;</span>, res)</span>
+<span id="cb19-20"><a href="#cb19-20"></a>  </span>
+<span id="cb19-21"><a href="#cb19-21"></a>  <span class="cf">if</span>(export) <span class="kw">saveRDS</span>(res, <span class="dt">file =</span> <span class="kw">paste0</span>(<span class="st">&quot;dat/FilmFeature_yr&quot;</span>,yr,<span class="st">&quot;.RDS&quot;</span>))</span>
+<span id="cb19-22"><a href="#cb19-22"></a>  <span class="kw">invisible</span>(res)</span>
+<span id="cb19-23"><a href="#cb19-23"></a>}</span>
+<span id="cb19-24"><a href="#cb19-24"></a></span>
+<span id="cb19-25"><a href="#cb19-25"></a><span class="kw">lapply</span>(<span class="kw">c</span>(<span class="dv">2017</span>, <span class="dv">2020</span>), scrape_year_film)</span></code></pre></div>
 </div>
 </section>
 
