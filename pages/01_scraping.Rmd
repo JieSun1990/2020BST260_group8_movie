@@ -1,0 +1,434 @@
+---
+title: "Scraping the IMDb website"
+author: "by Ta-Chou Ng (Vincent)"
+## output: github_document
+output:
+  prettydoc::html_pretty:
+    theme: cayman
+    highlight: github
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T, message = F, warning = F)
+```
+
+This document demonstrate how to scrape movie profiles from [IMDb](https://www.imdb.com/). There are three steps: First, we retrieved the catalog listing the movie IDs and names which will be use to scrape further in-depth information. Second, we iterated through the catalog to get various information including ratings, box office, cast list, and other details of each movie. Finally, we cast the scraped data into formats that can be used for regression and network analysis. 
+
+### 1. Retriveing the catalog {#sec1}
+
+The search engine on [IMDb](https://www.imdb.com/) website provides convenient way to search for movie with custom criteria through URL links. See the following example.
+
+> https://www.imdb.com/search/title/?title_type=feature&release_date=2001-01-01,2001-12-31&languages=en&sort=release_date,asc&start=1&view=simple
+
+This URL will give us the list of feature films (`?title_type=feature`) which released in 2001  (`release_date=2001-01-01,2001-12-31`), and will show from the first item (`start=1`) in English (`languages=en`), sorted by releasing dates (`sort=release_date,asc`) with simple views (`view=simple`). We used this method to filter out the feature films released from 2000~2020, and to retrieve the movie ID's (`imdbID`, uniquely defined for each movie by IMBb). 
+
+The annotated script is shown below. We define `scrape_cat_yr()` to retrieve the catalog by each year. 
+```{r}
+require(tidyverse)
+require(rvest)
+
+scrape_cat_yr <- function(yr, export = T){
+  
+  # specify the time period of releasing dates
+  url <- paste0(
+    "https://www.imdb.com/search/title/?title_type=feature&release_date=",
+    yr, "-01-01,", yr, "-12-31",
+    "&languages=en&sort=release_date,asc&start=1&view=simple")
+  
+  # the number of movies in the search result
+  N <- load_page(url)%>% 
+    html_nodes(css = "#main > div > div.nav > div.desc > span:nth-child(1)") %>%
+    html_text() %>% str_replace("(.+)(of\\s)(.+)(\\stitles.)", "\\3") %>%
+    str_replace(",", "") %>% as.integer()
+  
+  # Because they only show 50 items per page, we have to batch the movies by 50
+  # and we use lapply() to iterate through the batches
+  df <- lapply(seq(1, N, 50), function(i){
+    
+    # to avoid being blocked for frequent incessant requests from the website
+    Sys.sleep(1)
+    # navigating to the sub-page
+    h <- str_replace(url, "start=1", paste0("start=", i)) %>%
+      load_page()
+    
+    # get the searched items
+    items <- h %>%
+      html_nodes(css = "#main > div > div.lister.list.detail.sub-list > div")%>%
+      html_children()
+    
+    # get the movie title and releasing year
+    tmp <-items %>% 
+      html_nodes(xpath = "//span[@title]") %>%
+      html_text(trim = T)%>%
+      str_remove("\\n\\s+")
+    title <- str_sub(tmp, 1, -7)
+    year <- str_sub(tmp, -5, -2) %>% as.integer()
+    
+    # get the imdb ID
+    imdb_ID <- items %>% 
+      html_nodes(xpath = "//span[@title]/a")%>% 
+      html_attr(name = "href")%>% 
+      str_split("/") %>% purrr::map_chr(3)
+    
+    # output a one-row tibble
+    out <- tibble(year = year, title = title, imdb_ID = imdb_ID)
+    return(out)
+  }) %>% 
+    bind_rows()
+  
+  # save to disk
+  if(export) saveRDS(df, file = paste0("dat/FilmCatalog_yr",yr,".RDS"))
+  invisible(df)
+}
+```
+
+And we run the following code snippet to get all catalogs by year.
+```{r, eval=FALSE}
+lapply(2000:2020, scrape_cat_yr)
+```
+
+
+
+### 2. Retriveing individual movie information 
+
+Next, we use the movie ID (`imdb_ID`) to scrape for various information of each movie. We'll use [A Beautiful Mind (2001)](https://www.imdb.com/title/tt0268978) as the example. Its `imdb_ID` is `"tt0268978"`, and we can use that to find the main page of the movie using the URL: `https://www.imdb.com/title/tt0268978`.
+
+![https://www.imdb.com/title/tt0268978](tt0268978.PNG){width=60%}
+
+And the pages for other details of this movies can be found in the sub-directories of the main page. We also retrieved information from the following pages:
+
+  * `.../tt0268978/fullcredits`: A full [credit list](https://www.imdb.com/title/tt0268978/fullcredits) including the director(s), writer(s), and casts of the movie.
+  * `.../tt0268978/ratings`: The IMDb [rating scores](https://www.imdb.com/title/tt0268978/ratings) and number of votes (by gender and age group).
+  * `.../tt0268978/awards`: A list of [awards](https://www.imdb.com/title/tt0268978/awards) winned or nominated by the movie.
+  * `.../tt0268978/taglines`: A list of [taglines](https://www.imdb.com/title/tt0268978/taglines) of the movie.
+  * `.../tt0268978/quotes`: A list of [quotes](https://www.imdb.com/title/tt0268978/quotes) of the movie.
+  * `.../tt0268978/parentalguide`: The [MPAA rating](https://www.imdb.com/title/tt0268978/parentalguide) of the movie. 
+  
+For each movie, therefore, there are in total 7 web pages (1 main page + 6 sub-pages) that we'll scrape from. We will walk through the codes used to extract information contained in these pages. Let's start from the main page.
+
+#### 2.1 Main page
+
+The main page contains several variables of interest, namely, the genres, box office, language, country, and plot keywords of the movie.
+
+First, we define a function that loads a web page with http headers ensuring that we get the returning content in English.
+```{r}
+load_page <- function(x){
+  # take url x and request content in English
+  try({ # catch errors when we bump into something like Error:404
+    url(x, headers = c("Accept-Language"= "en-US")) %>%
+    read_html(x)
+  })
+}
+```
+
+Next, we start from scraping the table from the main page of the movie. There is an HTML table (xpath = `//div[@id='titleDetails']/div[@class='txt-block']`) listing the variables of interest, including the box office, budget, countries, etc. The following function `extrac_p1()` does this job, and save the result in `p1`, a list containing movie-specific information. All part of the results will be saved in this format. And they'll be combined into a larger list encompassing all variables we want. Note that the variable can be a single string or a string vector.
+```{r}
+iID <- "tt0268978"
+url <- paste0("https://www.imdb.com/title/", iID)
+content_1_main <- load_page(url)
+
+# sub-routine
+extrac_p1 <- function(content){
+  # temporary container for the results
+  tmp <- content%>% 
+  # select the table of movie details, and clean it
+  html_nodes(xpath = "//div[@id='titleDetails']/div[@class='txt-block']")%>% 
+  html_text(trim = T)%>%
+  str_replace_all("\\n\\s+","_")%>%
+  str_replace_all(":_",":")%>%
+  # make it a tibble
+  tibble(x = .) %>%
+  separate(col = "x", sep = ":", into = c("x", "y"),
+             fill = "right", extra = "drop")%>%
+  # keep variables of interest
+  filter(x %in% c("Country", "Language", "Budget",
+                  "Opening Weekend USA", "Gross USA", "Cumulative Worldwide Gross",
+                  "Runtime","Color"))%>%
+  mutate(y = str_trim(y), 
+         x= str_to_lower(x) %>% str_replace_all("\\s", "_")) %>%
+  # fill NAs
+  complete(
+    x = c("country", "language", "color", "runtime", "budget",
+          "opening_weekend_usa", "gross_usa", "cumulative_worldwide_gross"))
+  out <- as.list(tmp$y) %>% setNames(tmp$x)
+  return(out)
+}
+extrac_p1(content_1_main)
+```
+
+From another section of the main page, we extracted genre(s), plot keywords of the movie
+```{r}
+# sub-routine
+extrac_p1_2 <- function(content){
+  ## temporary container for genre/plot keyword
+  tmp <- content %>% 
+    html_nodes(xpath = "//div[@id='titleStoryLine']/div")%>%
+    html_text(trim = T)%>%
+    tibble(x = .) %>%
+    separate(col = "x", sep = ":\\n", into = c("x", "y"), fill = "right", extra = "drop")%>%
+    filter(x %in%c("Genres", "Plot Keywords"))%>%
+    mutate(y = str_replace_all(y, "\\n","") %>% str_replace_all("\\s+",""),
+           x= str_to_lower(x)%>% str_replace_all("\\s", "_"))%>%
+    # fill NAs
+    complete(x = c("plot_keywords", "genres"))
+  
+  # output list
+  out <- as.list(tmp$y) %>% setNames(tmp$x)
+  
+  out$plot_keywords <- out$plot_keywords%>% str_split("\\|") %>% 
+    unlist() %>% .[str_sub(.,1,6) != "SeeAll"] %>% str_to_lower()
+  
+  out$genres <- out$genres%>% str_split("\\|") %>% 
+    unlist() %>% .[str_sub(.,1,6) != "SeeAll"] %>% str_to_lower()
+  out
+}
+extrac_p1_2(content_1_main)[[2]] # shoe genres for example
+```
+
+
+#### 2.2 Credit list
+
+Next, we want to retrieve the director(s), writer(s), and cast for the movie collaboration analysis. There are three tables in the [credit list](https://www.imdb.com/title/tt0268978/fullcredits), with the header `director`, `writer`, and `cast.` The following annotated code retrieves these three tables, turns them into vector of names, and saves them in to the list `p2`.
+```{r}
+# load page
+content_2_cred <- paste0("https://www.imdb.com/title/", iID, "/fullcredits") %>%
+    load_page()
+
+# sub-routine
+extrac_p2 <- function(content){
+  content <- content %>% 
+    html_nodes(xpath = "//div[@id='fullcredits_content']") 
+  # get headers
+  hds <- content %>% 
+      html_nodes(xpath = "h4")%>%
+      html_attr(name="name")
+  # get tables
+  tabs <- content %>% 
+      html_nodes(xpath = "table")
+  # create containers
+  director <- NULL
+  writer <- NULL
+  cast <- NULL
+  # retrieve the vector of director names
+  if("director"%in%hds){
+    director <- tabs[[which(hds == "director")]]%>%
+      html_nodes(xpath = "tbody/tr/td/a[@href]")%>%
+      html_text(trim = T)
+  }
+  # retrieve the vector of writer names
+  if("writer"%in%hds){
+    writer <- tabs[[which(hds == "writer")]]%>%
+      html_nodes(xpath = "tbody/tr/td/a[@href]")%>%
+      html_text(trim = T)
+  }
+  # retrieve the vector of cast names
+  if("cast"%in%hds){
+    cast <- tabs[[which(hds == "cast")]]%>% 
+      html_nodes(xpath = "tr/td[not(@class)]/a[@href]")%>%
+      html_text(trim = T)
+  } 
+  list(director = director, writer = writer, cast = cast)
+}
+
+extrac_p2(content_2_cred)$director # just print the director(s) as an example
+```
+
+#### 2.3 Rating scores
+
+Then, we want the most important outcome variable, the IMDb rating from users, which we will use it to define success of a movie, and the performance score of a actor/actress get from starring in a movie.
+
+```{r}
+# load page
+content_3_rating <- paste0("https://www.imdb.com/title/", iID, "/ratings") %>%
+    load_page()
+
+
+# sub-routine
+extrac_p3 <- function(content){
+  # temporary container for the rating table
+  tmp <- content %>%
+      html_nodes(xpath = "//*[@id='main']/section/div/div[3]/div/table[2]")%>%
+      html_table(trim = T)
+  if(length(tmp) > 0 ){
+    # for movies with IMDb ratings, extract the overall, male and female ratings 
+    # and the number of votes recieved
+    out <- tmp %>% .[[1]] %>%
+      lapply(function(x) str_replace_all(x, "\\n\\s+","_")) %>%
+      lapply(function(x) str_replace_all(x, ",","")) %>% .[[2]]%>%
+      tibble(x = ., sex = c("all", "male", "female"))%>%
+      separate(col = "x",sep="_", into = c("rating", "vote"), convert = F, 
+               fill = "right", extra = "drop") %>%
+      pivot_wider(values_from = c("rating", "vote"), names_from = "sex") %>%
+      as.list()
+  } else{
+    # some movie has no ratings or the table at all
+    out <- list(rating_all = NA_character_, rating_male = NA_character_,
+               rating_female = NA_character_,
+               vote_all = NA_character_, vote_male = NA_character_,
+               vote_female = NA_character_)
+  }
+  out
+}
+extrac_p3(content_3_rating)
+```
+
+#### 2.4 Awards
+
+Another important variable to define movie success is the awards wined or nominated. In each [award lists](https://www.imdb.com/title/tt0268978/awards). The will be a short description of the numbers of awards wined and nominated by the movie. We parse the short paragraph to get these variables. In addition, we'd like to know whether the movie wins or nominated by Oscars, the most prominent award we've heard. We extract these variable by looking for `WinnerOscar` and `NomineeOscar` in the awards table of the movie.
+```{r}
+# load page
+content_4_award <- paste0("https://www.imdb.com/title/", iID, "/awards") %>%
+    load_page()
+
+# sub-routine
+extrac_p4 <- function(content){
+   # temporary container for the description paragraph
+  tmp <- content%>%
+    html_nodes(xpath = "//div[@class='desc']") %>%
+    html_text(trim = T)
+  # parse for the no. of awards wined
+  award_win <- ifelse(
+    length(tmp) == 0, "0", 
+    tmp %>% str_extract("\\d+\\swins") %>% 
+      str_split("\\s") %>% .[[1]] %>% .[1]  )
+  # parse for the no. of awards nominatedd
+  award_nom <- ifelse(
+    length(tmp) == 0, "0", 
+    tmp %>% str_extract("\\d+\\snomination") %>% 
+      str_split("\\s") %>% .[[1]] %>% .[1] )
+  # temporary container for the award table
+  tmp2 <- content%>%
+      html_nodes(xpath = "//table[@class='awards']/tr/td[@class = 'title_award_outcome']")%>%
+      html_text(trim = T)
+  list(
+    award_win = award_win ,
+    award_nom = award_nom,
+    winner_oscar = ifelse("WinnerOscar" %in% tmp2, "1", "0") ,
+    nominee_oscar = ifelse("NomineeOscar" %in% tmp2, "1", "0")
+  )
+}
+extrac_p4(content_4_award)
+```
+#### 2.5 Taglines/ Quotes/ MPAA rating
+
+Finally, we also extracted some other information of a movie (these variable are eventually not used in the subsequent analysis), like taglines, and quotes.
+```{r}
+## taglines
+content_5_taglines <- paste0("https://www.imdb.com/title/", iID,"/taglines") %>%
+  load_page()
+
+# sub-routine
+extrac_p5 <- function(content){
+  # temporary container for the taglines
+  tmp <- content %>% 
+    html_nodes(xpath = "//div[@id='taglines_content']/div[@class!='header']")
+  # extract those having taglines
+  if( any(str_detect(html_attr(tmp, name = "class"), "soda")) ){
+    tmp <- tmp %>%  html_text(trim = T)
+    out <- tmp[1:min(3,length(tmp))] %>% list(taglines = .)
+  }else{
+    out <- list(taglines = NA_character_)
+  }
+  out
+}
+extrac_p5(content_5_taglines)
+```
+
+```{r}
+## quotes
+content_6_quotes <- paste0("https://www.imdb.com/title/", iID,"/quotes") %>%
+  load_page()
+
+# sub-routine
+extrac_p6 <- function(content){
+  # temporary container for the quotes
+  tmp <- content %>% 
+  html_nodes(
+    xpath = "//div[@id='quotes_content']/div[@class='list']/div/div[@class='sodatext']")%>%
+  html_text(trim = T)
+  # extract those having quotes
+  if(length(tmp) > 0){
+    out <- tmp[1:min(3,length(tmp))] %>%  list(quotes = .)
+  } else {
+    out <- list(quotes = NA_character_)
+  }
+  out
+}
+extrac_p6(content_6_quotes)
+```
+
+
+### Putting together
+
+All the above sub-tasks, are then combined into a wrapper function `scrape_one_film()` to scrape the information all at once.  Also, a helper function `act_none()` is created to help  deal with empty lists (for some not quite popular movies, few information is on IMDb). 
+```{r}
+act_none <- function(x){
+  # we'll at times retrieve an empty list for a variable from a page
+  # this replace them with NA_character_
+  if(length(x) == 0 ){ 
+    NA_character_ 
+  } else if (length(x)==1 & is.na(x[1])) {
+    NA_character_
+  } else {x}
+}
+
+scrape_one_film <- function(iID, title = NULL , year = NULL){
+  
+  url <- paste0("https://www.imdb.com/title/", iID)
+  p0 <- list(imdb_ID = iID, title = title, year = year, url = url)
+    
+  content_1_main <- load_page(url)
+  p1 <- extrac_p1(content_1_main)
+  p1_2 <- extrac_p1_2(content_1_main)
+  
+  p2 <- paste0("https://www.imdb.com/title/", iID,"/fullcredits") %>%
+    load_page() %>% extrac_p2()
+  
+  p3 <- paste0("https://www.imdb.com/title/", iID,"/ratings") %>%
+    load_page() %>% extrac_p3()
+  
+  p4 <- paste0("https://www.imdb.com/title/", iID,"/awards") %>%
+    load_page() %>% extrac_p4()
+  
+  p5 <- paste0("https://www.imdb.com/title/", iID,"/taglines") %>%
+    load_page() %>% extrac_p5()
+  
+  p6 <- paste0("https://www.imdb.com/title/", iID,"/quotes") %>%
+    load_page() %>% extrac_p6()
+  
+  out <- list(p1, p1_2, p2, p3, p4, p5, p6)
+  out <- lapply(out, act_none)
+  return(out)
+}
+```
+
+Then, we can finally us this wrapper function to iterate through the catalogs we constructed in [section 1](#sec1) to scrape wll the information we want from IMDb. `scrape_year_film()` is created to iterate through all movies in one year, and it implements parallel process to speed up, as follows. After implementing this code, we found that sending http request sometimes fails after a long, continuous line of request, so we have to batch the requests to avoid this issue.
+
+```{r eval=FALSE}
+### NOT RUN
+scrape_year_film <- function(yr, export = T){
+  
+  # read catalog
+  df <- readRDS(paste0("dat/FilmCatalog_yr",yr,".RDS"))
+  
+  # batching
+  dfls <- split.data.frame(df, (0:(NROW(df)-1)) %/% 20 ) %>% unname()
+  
+  # parallel
+  plan(multiprocess, workers = 2)
+  res <- future_lapply(dfls, function(sdf){
+    Sys.sleep(.5)
+    lapply(1:NROW(sdf), function(i){
+      scrape_one_film(sdf$imdb_ID[i],sdf$title[i],sdf$year[i]) }) %>%
+      setNames(sdf$imdb_ID)
+  })
+  plan(sequential)
+  res <- do.call("c", res)
+  
+  if(export) saveRDS(res, file = paste0("dat/FilmFeature_yr",yr,".RDS"))
+  invisible(res)
+}
+
+lapply(c(2017, 2020), scrape_year_film)
+```
+
