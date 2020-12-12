@@ -1,14 +1,9 @@
 # load packages
-# pkgs <- c("tidyverse", "shiny", "shinythemes", "visNetwork")
-# for(x in pkgs){
-#   if(!x %in% installed.packages()[,1]) install.packages(x)
-#   library(x, character.only = T)
-# }
-library(tidyverse)
-library(shiny)
-library(shinythemes)
-library(visNetwork)
-
+pkgs <- c("tidyverse", "shiny", "shinythemes", "visNetwork")
+for(x in pkgs){
+  if(!x %in% installed.packages()[,1]) install.packages(x)
+  library(x, character.only = T)
+}
 
 # Tab1 data
 # p <- readRDS("dat/Data_people_00to20.RDS")
@@ -87,27 +82,66 @@ ui <- fluidPage(theme = shinytheme("cyborg"),
                   tabPanel("Network Exploration", # 
                            br(),
                            fluidRow(
-                             column(4,
-                                    selectizeInput("m2_ntype", "Type of collaboration network", 
+                             column(10,
+                                    HTML("<div style='color:#FFFFFF;font-size:110%'>
+                                    <b style='color:#ffffcc;font-size:120%'>Movie collaboration networks</b> represent the relationship of movies in terms of co-casting, co-directing, and co-writing. 
+                                        Try to see if the network position and predict the success of a movie. Larger nodes means higher success.
+                                        <br><br>
+                                        <p style='color:#FFFFFF'><b>
+                                        (1) Select your favorite movie to see its collaboration network.<br>
+                                        (2) Select the type of success (the default of average IMDb rating). This will show as the node size.<br>
+                                        (3) Select the layer of the collaboration network, This changes the definition of links.</b>
+                                        <br><br>
+                                        </p>
+                                        Is your movie successful?<br> 
+                                        Is it also surrounded by successful movies? Or the other way around?<br>
+                                        Hover through the nodes and the links to see their attributes.<br>
+                                        Change the settings to see how your movie performs in other perspectives.<br>
+                                        </div>")
+                                    )
+                           ), hr(),
+                           fluidRow(
+                             column(5,
+                                    selectizeInput("m2_mvn", "(1) Select one movie as the center", 
+                                                   choices = ndls$title, selected = "Interstellar", 
+                                                   multiple = F, 
+                                                   options = list(placeholder = "Type to search")))
+                             
+                           ),
+                           fluidRow(
+                             column(5,
+                                    selectizeInput("m2_y", "(2) Select the type of success", 
+                                                   choices = c("Average IMDb rating" = "rating_all", 
+                                                               "Total IMDb rating" = "rating_all_vote", 
+                                                               "Box office (US)" = "gross_usa", 
+                                                               "Box office (World-wide)" = "cumulative_worldwide_gross",
+                                                               "Number of awards wined" = "award_win"), 
+                                                   multiple = F, 
+                                                   options = list(placeholder = "Choose one"))),
+                             column(5,
+                                    selectizeInput("m2_ntype", "(3) Select the layer of collaboration network", 
                                                     choices = c("Co-starring" = "c_c", 
                                                                "Co-directing" = "c_d", "Co-writing" = "c_w"), 
                                                    multiple = F, 
-                                                   options = list(placeholder = "Type to search"))),
-                             column(4,
-                                    selectizeInput("m2_mvn", "Select one movie as the root", 
-                                          choices = ndls$title, selected = "1917", 
-                                          multiple = F, 
-                                          options = list(placeholder = "Type to search"))),
-                             column(4)
+                                                   options = list(placeholder = "Choose one")))
                            ),
                            fluidRow(
-                             column(8,
+                             column(10,
                                     visNetworkOutput("m2_out_g1", width = "100%", height = "500px")  ),
-                             column(4)
+                             column(2)
                            ),
-                           br()
-                           
-                           
+                           hr(),
+                           fluidRow(
+                             column(10,
+                                    HTML("<div style='color:#FFFFFF;font-size:100%'>
+                                    Note: This present the ego network of the movie you choosed. 
+                                    Higher order links (links between the neighbors) are ommitted if they are too weak.
+                                    <br>
+                                    See our <a href='https://dachuwu.github.io/2020BST260_group8_movie/' target='_blank'>website</a> for more information.
+                                    <br><br><br><br></div>")
+                             )
+                           )
+
                   )
                 )
 )
@@ -338,8 +372,10 @@ server <- function(input, output) {
   
   # Module 2 (Vincent)
   m2_g1 <- reactive({
+    if(input$m2_mvn %in% ndls$title){
       plot_mv_ego(input$m2_mvn, evar = input$m2_ntype, max.n = 70, 
-                  nodeLS = ndls, edgeLS = edls, m2i = mvn2id, i2r = id2rating)
+                  nodeLS = ndls, edgeLS = edls, m2i = mvn2id, i2r = id2rating, yvar = input$m2_y)
+    }
   })
   output$m2_out_g1 <- renderVisNetwork(m2_g1())
   

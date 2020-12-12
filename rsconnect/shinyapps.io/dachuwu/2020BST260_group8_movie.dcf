@@ -5,9 +5,9 @@ account: dachuwu
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 3389284
-bundleId: 3975879
+bundleId: 3979512
 url: https://dachuwu.shinyapps.io/2020BST260_group8_movie/
-when: 1607703464.68425
+when: 1607786708.64151
 asMultiple: FALSE
 asStatic: FALSE
-ignoredFiles: _config.yml|index.md|sub/01_scraping.html
+ignoredFiles: _config.yml|index.md|README.md|pages/01_scraping.html|pages/01_scraping.Rmd|pages/04_logistic_regression.html|pages/04_logistic_regression.Rmd
