@@ -1,0 +1,245 @@
+---
+title: "Building Movie Collaboration Network"
+author: "by Ta-Chou Ng (Vincent)"
+## output: github_document
+output:
+  prettydoc::html_pretty:
+    theme: cayman
+    highlight: github
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T, message = F, warning = F)
+```
+
+This document demonstrate how to build movie collaboration network, using the credit list scraped from [IMDb](https://www.imdb.com/). We also provide the codes to visualize the network as in the shiny app.
+
+### 1. Build the network  {#sec1}
+
+The annotated code for building the network is as follows.
+```{r eval=FALSE}
+### movie multiplex network 
+require(tidyverse)
+require(future)
+require(future.apply)
+require(igraph)
+
+df1 <- readRDS("dat/Data_info_00to20.RDS")
+df2 <- readRDS("dat/Data_people_00to20.RDS")
+
+### filter movies with no overall ratings, outside USA, not English
+sel <- which(!is.na(df1$rating_all) & df1$country_USA==1 & df1$lang_English==1 & !is.na(df1$gross_usa)) 
+df1 <- df1[sel,] %>%
+  select(-starts_with("lang_"),-starts_with("country_"))
+df2 <- df2[sel,] %>%
+  select(imdb_ID, director, writer, cast)# 6152 movies remaining
+
+### Create edge list (Un-directed, weighted)
+### Its empty now, will fill in the edge weights later
+any(duplicated(df2$imdb_ID))
+
+N <- NROW(df2$imdb_ID)
+edls <- lapply(1:(N-1), function(i){
+    tibble(from = i, to = (i+1):N )
+})%>% bind_rows()
+
+### Calculate weighted edges between two movies, x specified the type collaboration focused
+calc_wts <- function(i, j, x = "cast"){
+  #i <- 3533; j <- 5649
+  c_ij <- length(intersect(df2[[x]][[i]], df2[[x]][[j]]))
+  if(c_ij == 0){ 
+    return(c(c_ij = 0, w_ij = 0))
+  } else{
+    w_ij = c_ij/sqrt(length(df2[[x]][[i]])*length(df2[[x]][[j]]))
+    return(c(c_ij = c_ij, w_ij = w_ij))
+  }
+}
+
+#### Iterated through the edge list, and calculate all three type of edges
+plan(multisession, workers = 8)
+# co-cast
+wts_c <- future_lapply(1:NROW(edls), function(k){
+  calc_wts(i = edls$from[k], j = edls$to[k], x = "cast")
+}) %>% bind_rows() %>% setNames(nm = c("c_c", "w_c"))
+# co-director
+wts_d <- future_lapply(1:NROW(edls), function(k){
+  calc_wts(i = edls$from[k], j = edls$to[k], x = "director")
+}) %>% bind_rows() %>% setNames(nm = c("c_d", "w_d"))
+# co-writer
+wts_w <- future_lapply(1:NROW(edls), function(k){
+  calc_wts(i = edls$from[k], j = edls$to[k], x = "writer")
+}) %>% bind_rows()%>% setNames(nm = c("c_w", "w_w"))
+
+plan(sequential)
+
+edls <- bind_cols(edls, wts_c, wts_d, wts_w)
+edls <- edls %>%
+  filter(c_c + c_d + c_w > 0)
+
+saveRDS(edls, file = "dat/Net_movie_edls.RDS")
+
+
+
+### Convert the edge list to an igraph object for calculating node centrality
+edls <- readRDS(file = "dat/Net_movie_edls.RDS")%>%
+  mutate( from = df1$imdb_ID[from], to = df1$imdb_ID[to])
+
+Gm <- graph_from_edgelist(as.matrix(edls[,c("from","to")]), directed = F)%>%
+  set_edge_attr("c_c", value = edls$c_c)%>%
+  set_edge_attr("c_d", value = edls$c_d)%>%
+  set_edge_attr("c_w", value = edls$c_w)
+summary(Gm)
+
+### create the node list
+ndls <- as_data_frame(Gm, what = "vertices") %>%
+  left_join(df1, by = c("name"="imdb_ID")) %>%
+  rename(id = name)
+
+### calculate node eigen centrality in terms of all types of edges
+tmp <- eigen_centrality(
+  Gm %>% set_edge_attr("weight", value = edls$w_c))$vector
+ndls$eigen_cen_c <- tmp[ndls$id]
+
+tmp <- eigen_centrality(
+  Gm %>% set_edge_attr("weight", value = edls$w_d))$vector
+ndls$eigen_cen_d <- tmp[ndls$id]
+
+tmp <- eigen_centrality(
+  Gm %>% set_edge_attr("weight", value = edls$w_w))$vector
+ndls$eigen_cen_w <- tmp[ndls$id]
+
+
+```
+
+### 2. Visualize the network  {#sec2}
+
+Then we visualize the network interactively using the `visNetwork` R package.
+
+```{r}
+require(tidyverse)
+require(visNetwork)
+
+# load the calculated network
+load(file = "../dat/Net_movie.RData")
+
+ndls0 <- left_join(ndls, df2, by = c("id" = "imdb_ID"))%>%
+  select(-starts_with("genre_"), -ends_with("male"), -ends_with("female"))%>%
+  mutate(
+    director = lapply(director, function(x) paste0(x, collapse = ", ") ) %>% unlist,
+    writer = lapply(writer, function(x) paste0(x, collapse = ", ") )%>% unlist,
+    cast = lapply(cast, function(x) paste0(x[1:5], collapse = ", ") )%>% unlist,
+    genres = lapply(genres, function(x) paste0(x[1:3], collapse = ", ") )%>% unlist,
+    award_win = ifelse(is.na(award_win), 0, award_win),
+    title = str_remove(title, "\\(.+\\)"),
+  )%>%
+  filter(title != "")%>%
+  arrange(title)
+
+# helpers
+mvn2id <- setNames(ndls0$id, nm = ndls0$title)
+id2mvn <- setNames(ndls0$title, nm = ndls0$id)
+id2rating <- setNames(ndls0$rating_all, nm = ndls0$id)
+
+# define tooltip info
+ndls <- ndls0 %>%
+  mutate(
+    tooltip = paste0("<div style='font-size:70%'>",
+                   "<b style='font-size:150%;color:#396a93;'>", title,"</b> <b>(", year, ")</b><br>",
+                   "<b>Director:</b> ", director, "<br>",
+                   "<b>Writer:</b> ", writer, "<br>",
+                   "<b>Cast:</b> ", cast, ", ...<br>",
+                   "<b>Genre:</b> ", genres, "<br>",
+                   "<b>Rating:</b> ", rating_all, "/10 by ", vote_all, " voters <br>",
+                   "<b>Box office:</b> ", gross_usa, " US dollars<br>",
+                   "<b>Awards winned:</b> ", award_win, "<br>",
+                   "<b>Eigen centrality:</b> ", round(eigen_cen_c, 3),"<br>",
+                   "<b>More on <a href='https://www.imdb.com/title/", id ,"'>IMDb</a></b></div>"
+                   )
+  ) %>%
+  select(id, title, year,award_win, rating_all, vote_all, gross_usa, cumulative_worldwide_gross, budget, tooltip)%>%
+  mutate(
+    rating_all_vote = rating_all*vote_all,
+    rating_all_vote = ecdf(rating_all_vote)(rating_all_vote),
+    rating_all  = ecdf(rating_all)(rating_all),
+    gross_usa  = ecdf(gross_usa)(gross_usa),
+    cumulative_worldwide_gross  = ecdf(cumulative_worldwide_gross)(cumulative_worldwide_gross),
+    award_win = ecdf(award_win)(award_win)
+    )
+
+
+edls <- edls %>%
+  mutate(title = paste0("<div style='font-size:70%'>",
+                        "<b style='color:#396a93;'>", id2mvn[from], " <-> ",
+                        id2mvn[to], "</b><br>",
+                        "<b>No. of co-star:</b> ", c_c, "<br>",
+                        "<b>No. of co-director:</b> ", c_d, "<br>",
+                        "<b>No. of co-writer:</b> ", c_w, "</div>" ))
+
+
+# Main function to plot the ego network of a movie
+plot_mv_ego <- function(mvn, evar = "c_d",
+                        max.n = 100, nodeLS = ndls,  edgeLS = edls, 
+                        m2i = mvn2id, i2r = id2rating, yvar = "rating_all"){
+
+  x <- m2i[[mvn]]
+  ed_x <- edgeLS %>%
+      filter(from == x | to == x)%>%
+      filter(!!sym(evar) > 0)%>%
+      mutate(color = "#a6a6a6")
+  
+  x.nei <- unique(c(ed_x$from, ed_x$to))%>% .[.!=x]    
+  
+  wcut <- ifelse(evar == "c_c", 3, 1)
+  ed_x <- bind_rows(
+    ed_x,
+    edgeLS %>% filter(!!sym(evar) > wcut)%>%
+      filter(from %in% x.nei & to %in% x.nei)%>%
+      mutate(color = "#cccccc")
+  ) 
+  
+  if(length(x.nei) > max.n){ # show at most max.n nodes
+    x.nei <- i2r[x.nei] %>% sort(decreasing = T) %>%
+      names() %>% .[1:max.n]
+  }
+  
+  nd_x <- nodeLS %>%
+    filter(id %in% c(x, x.nei))%>%
+    mutate(color = ifelse(id == x, "#DC143C", "#7eaacd"),
+           label = "", value = !!sym(yvar), title = tooltip) 
+  
+  out <- visNetwork(nd_x, ed_x, background ="#fff9f3")%>% 
+    visEdges(
+       # color = list(hover="#eb2d53",
+       #            highlight="#eb2d53", inherit=F),
+      scaling = list(min=.5, max=25))%>%
+    visNodes(borderWidth=0.3,
+             scaling = list(min=5, max=25))%>%
+    visOptions(
+      highlightNearest =list(enabled=T, 
+                             algorithm="hierarchical", degree=1))%>%
+    visInteraction(navigationButtons = F, hover = T,
+                   hideEdgesOnDrag=T, selectConnectedEdges=T)%>%
+    visPhysics(enabled = T,
+               barnesHut = list(
+                 centralGravity = 0.3,
+                 springConstant = 0.04,
+                 damping = 1
+               ))
+  return(out)
+}
+```
+
+
+Then we test the plotting function using Monsters University as an example
+
+```{r}
+plot_mv_ego(mvn = "Monsters University", evar = "c_c", max.n = 50, yvar = "gross_usa")
+```
+
+
+
+Then, we packed all the data, functions for the siny app module.
+```{r eval=FALSE}
+save(ndls, edls, plot_mv_ego, mvn2id, id2rating, file = "dat/Module2_network.RData")
+```
+
