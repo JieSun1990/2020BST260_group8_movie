@@ -15,6 +15,7 @@ All the data used is in `/dat`.
 -  dat/Data_people_00to20.RDS: scraped movie crew lists from IMDb
 -  Module1_EDA.RData: processed data for shiny app module 1
 -  Module2_network.RData: processed data for shiny app module 2
+-  Net_movie.RDS: the collaboration movie network calculated
 
 **Website link**: https://dachuwu.github.io/2020BST260_group8_movie/
 
