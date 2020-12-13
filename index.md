@@ -3,6 +3,9 @@
 
 **Team members: Jie Sun, Ta-Chou Ng (Vincent), Yu Sun**
 
+## Screencast 
+<iframe width="560" height="315" src="https://www.youtube.com/embed/IcmTp5vjfEw" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+
 ## Overview and Motivation: 
 
 Predicting the success of a movie is important for the film-making company (to produce what kind of movie). Our primary motivation is to understand how common features and the network properties relate to a movie success, and develop predictive models to identify the next blockbuster. 
@@ -56,7 +59,8 @@ We built 4 models to study the relationship between a movie’s success and cova
 
 
 
-## Shiny Application and Our Screencast
-Our Shiny application can be found [here](https://dachuwu.shinyapps.io/2020BST260_group8_movie/)
+## Shiny Application 
+Our Shiny application can be online found [here](https://dachuwu.shinyapps.io/2020BST260_group8_movie/), though we recommend to run on your own computer. The data and Shiny script can be found [here](https://github.com/dachuwu/2020BST260_group8_movie)
 
-Our screencast can be found [here]()
+
+
