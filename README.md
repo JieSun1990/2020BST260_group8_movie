@@ -10,5 +10,7 @@
 -  3. Run our Shiny app `app.R` in this repositry (recommended), or [here](https://dachuwu.shinyapps.io/2020BST260_group8_movie/)
 
 **Website link**: https://dachuwu.github.io/2020BST260_group8_movie/
+
 **Screencast link**: https://youtu.be/CZdfWBSst0U
+
 **Shiny link**: https://dachuwu.shinyapps.io/2020BST260_group8_movie/
