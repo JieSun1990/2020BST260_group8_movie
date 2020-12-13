@@ -1,4 +1,4 @@
-# BST260 final project - group 8 Predict movie success
+# BST260 final project - group 8 Predict Movie Success
 
 **Team members**: Jie Sun, Ta-Chou Ng (Vincent), Yu Sun
 
