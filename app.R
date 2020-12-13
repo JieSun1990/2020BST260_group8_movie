@@ -1,10 +1,9 @@
 # load packages
-pkgs <- c("tidyverse", "shiny", "shinythemes", "visNetwork")
-for(x in pkgs){
-  if(!x %in% installed.packages()[,1]) install.packages(x)
-  library(x, character.only = T)
-}
 
+library(tidyverse)
+library(shiny)
+library(shinythemes)
+library(visNetwork)
 # Tab1 data
 # p <- readRDS("dat/Data_people_00to20.RDS")
 # s <- readRDS("dat/Data_info_00to20.RDS")
