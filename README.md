@@ -11,6 +11,7 @@
 
 **Data**:
 All the data used is in `/dat`.
+
 -  dat/Data_info_00to20.RDS: scraped movie variables from IMDb
 -  dat/Data_people_00to20.RDS: scraped movie crew lists from IMDb
 -  Module1_EDA.RData: processed data for shiny app module 1
