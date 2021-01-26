@@ -101,7 +101,7 @@ Our objective is to identify the next successful movie to invest, so we need a w
 
 ### 2 definitions of success
 
-####1. Good ratings or award-winning
+#### 1. Good ratings or award-winning
 
 Ratings are highly dependent on the size of the rating population, but they are generally good indicators of the _reputation_ of a movie. Likewise, winning or being nominated of an award suggests that the movie has met certain artistic quality (we hope). Under these two criteria, some low-budget or niche movies may not have reached the wider public, but they can be considered 'successful'. 
 
