@@ -214,6 +214,7 @@ Some top directors below:
 d3.3 %>% arrange(desc(dir_score)) %>% select(dir_lst,dir_score) %>% head()
 ```
 The higher the score (close to 2), the better the director. You may think that this definition of the X2 variable (quality of director) is not entirely sound. Improvements we can think of include: 
+
 * Give 10 if a director has won an Oscar (however, it will not make a big difference to the model as most directors have not won an Oscar) 
 * Include the movie sales to construct the score. 
 * X2 is currently an average, but we can also make it a sum of the total scores that the director has achieved.
@@ -265,6 +266,7 @@ head(actor_score,10)
 There are 310000+ unique actors in total. The average number of actors per movie is around 30.
 
 * **Step 4**: For each movie, we calculate the cast score as a weighted sum of the actor's quality score. 2 main actors contribute 100% of their personal quality score, while supporting actors contribute 10% of their personal quality score. This weighted sum is the X3 (cast_score) variable in our analysis. 
+
   + This is consistent with the way we define actor's personal quality score. It also reflects the fact that movies with successful main actors are more likely to succeed. 
   
 ```{r, warning=FALSE}
@@ -459,10 +461,13 @@ plot(roc_lm2.2,col='orange', add = TRUE)
 ## Discussion
 
 * An important issue we did not address above is *multicollinearity* between the X variables. We construct `director's quality` score using rating and award information, and we also construct `cast's quality` score using rating. They *are* going to be related. 
+
   + One way to reduce the dependency, is to transform the `rating` information differently when constructing X2 and X3 variables. Hence our self-defence for the seemingly weird way to calculate the director's score above. 
+  
   + A 2nd way is to introduce interaction terms between X2(director's quality) and X3(cast's quality). We know in reality that good directors tend to work with good actors, and they tend to work with people they already know. 
 
 * We can improve the model by the following: 
+
   + Change the scoring system.
   + Add variables such as `year` to take into account the time effect, and `writer` for the quality of the screenplay. 
   + address the multicollinearity issue among the X variables. 
