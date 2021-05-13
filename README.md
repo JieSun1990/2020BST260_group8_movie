@@ -18,7 +18,7 @@ All the data used is in `/dat`.
 -  Module2_network.RData: processed data for shiny app module 2
 -  Net_movie.RData: the collaboration movie network calculated
 
-**Website link**: https://dachuwu.github.io/2020BST260_group8_movie/
+**Website link**: https://jiesun1990.github.io/Predicting_Movie_Success/
 
 **Screencast link**: https://youtu.be/CZdfWBSst0U
 
